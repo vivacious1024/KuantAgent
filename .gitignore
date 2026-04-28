@@ -29,5 +29,6 @@ QuantAgent/.git_backup_*/
 **/*.jpg
 **/*.jpeg
 **/*.gif
+!/README.md
 
 record.csv
