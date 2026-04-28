@@ -1,0 +1,15 @@
+DEFAULT_CONFIG = {
+    "agent_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+    "graph_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+    "vision_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+    "agent_llm_provider": "qwen",
+    "graph_llm_provider": "qwen",
+    "vision_llm_provider": "qwen",
+    "agent_llm_temperature": 0.1,
+    "graph_llm_temperature": 0.1,
+    "vision_llm_temperature": 0.1,
+    "api_key": "",
+    "anthropic_api_key": "",
+    "qwen_api_key": "",
+    "use_multimodal_images": True,
+}
