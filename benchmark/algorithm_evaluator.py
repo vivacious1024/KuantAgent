@@ -58,10 +58,23 @@ def evaluate_directional_accuracy(
             timeframe = baseline_result.get("timeframe")
         confidence = float(baseline_result.get("confidence", 0.0) or 0.0)
 
+        final_direction_correct = int(
+            baseline_result.get(
+                "final_direction_correct",
+                int(predicted == true_direction),
+            )
+            or 0
+        )
         if label_manifest is None:
-            correct = int(baseline_result.get("correct", int(predicted == true_direction)) or 0)
+            horizon_majority_correct = int(
+                baseline_result.get(
+                    "horizon_majority_correct",
+                    baseline_result.get("correct", final_direction_correct),
+                )
+                or 0
+            )
         else:
-            correct = int(predicted == true_direction)
+            horizon_majority_correct = int(predicted == true_direction)
 
         rows.append(
             {
@@ -69,7 +82,9 @@ def evaluate_directional_accuracy(
                 "predicted": predicted,
                 "true_direction": true_direction,
                 "confidence": confidence,
-                "correct": correct,
+                "final_direction_correct": final_direction_correct,
+                "horizon_majority_correct": horizon_majority_correct,
+                "correct": horizon_majority_correct,
                 "is_neutral_prediction": int(predicted == "NEUTRAL"),
                 "asset": asset,
                 "timeframe": timeframe,
@@ -86,47 +101,66 @@ def evaluate_directional_accuracy(
         return {
             "num_samples": 0,
             "accuracy": None,
+            "final_direction_accuracy": None,
+            "horizon_majority_accuracy": None,
             "avg_confidence": None,
             "details": [],
         }
 
-    accuracy = float(evaluation_df["correct"].mean())
+    final_direction_accuracy = float(evaluation_df["final_direction_correct"].mean())
+    horizon_majority_accuracy = float(evaluation_df["horizon_majority_correct"].mean())
     horizon_correct = int(evaluation_df["horizon_correct_count"].sum()) if "horizon_correct_count" in evaluation_df.columns else int(evaluation_df["correct"].sum())
     horizon_total = int(evaluation_df["horizon_total_count"].sum()) if "horizon_total_count" in evaluation_df.columns else int(len(evaluation_df))
     horizon_step_accuracy = None if horizon_total == 0 else round(float(horizon_correct / horizon_total), 4)
     avg_confidence = float(evaluation_df["confidence"].mean())
 
     asset_accuracy = (
-        evaluation_df.groupby("asset")["correct"].mean().round(4).to_dict()
+        evaluation_df.groupby("asset")["horizon_majority_correct"].mean().round(4).to_dict()
+        if "asset" in evaluation_df.columns
+        else {}
+    )
+    asset_final_direction_accuracy = (
+        evaluation_df.groupby("asset")["final_direction_correct"].mean().round(4).to_dict()
         if "asset" in evaluation_df.columns
         else {}
     )
     actionable_df = evaluation_df[evaluation_df["is_neutral_prediction"] == 0]
     actionable_accuracy = None
+    final_direction_actionable_accuracy = None
     actionable_coverage = 0.0
     actionable_num_samples = 0
     if not actionable_df.empty:
-        actionable_accuracy = round(float(actionable_df["correct"].mean()), 4)
+        actionable_accuracy = round(float(actionable_df["horizon_majority_correct"].mean()), 4)
+        final_direction_actionable_accuracy = round(float(actionable_df["final_direction_correct"].mean()), 4)
         actionable_num_samples = int(len(actionable_df))
         actionable_coverage = round(float(len(actionable_df) / len(evaluation_df)), 4)
 
     strong_move_df = evaluation_df[evaluation_df["is_neutral_move"] == 0]
     filtered_accuracy = None
+    final_direction_filtered_accuracy = None
     filtered_num_samples = 0
     if not strong_move_df.empty:
-        filtered_accuracy = round(float(strong_move_df["correct"].mean()), 4)
+        filtered_accuracy = round(float(strong_move_df["horizon_majority_correct"].mean()), 4)
+        final_direction_filtered_accuracy = round(float(strong_move_df["final_direction_correct"].mean()), 4)
         filtered_num_samples = int(len(strong_move_df))
 
     strong_move_actionable_df = strong_move_df[strong_move_df["is_neutral_prediction"] == 0]
     filtered_actionable_accuracy = None
+    final_direction_filtered_actionable_accuracy = None
     filtered_actionable_num_samples = 0
     if not strong_move_actionable_df.empty:
-        filtered_actionable_accuracy = round(float(strong_move_actionable_df["correct"].mean()), 4)
+        filtered_actionable_accuracy = round(float(strong_move_actionable_df["horizon_majority_correct"].mean()), 4)
+        final_direction_filtered_actionable_accuracy = round(
+            float(strong_move_actionable_df["final_direction_correct"].mean()),
+            4,
+        )
         filtered_actionable_num_samples = int(len(strong_move_actionable_df))
 
     return {
         "num_samples": int(len(evaluation_df)),
-        "accuracy": round(accuracy, 4),
+        "accuracy": round(horizon_majority_accuracy, 4),
+        "final_direction_accuracy": round(final_direction_accuracy, 4),
+        "horizon_majority_accuracy": round(horizon_majority_accuracy, 4),
         "horizon_step_accuracy": horizon_step_accuracy,
         "horizon_correct_count": horizon_correct,
         "horizon_total_count": horizon_total,
@@ -135,12 +169,16 @@ def evaluate_directional_accuracy(
         "actionable_num_samples": actionable_num_samples,
         "actionable_coverage": actionable_coverage,
         "actionable_accuracy": actionable_accuracy,
+        "final_direction_actionable_accuracy": final_direction_actionable_accuracy,
         "num_neutral_moves": int(evaluation_df["is_neutral_move"].sum()),
         "filtered_num_samples": filtered_num_samples,
         "filtered_accuracy_ex_neutral": filtered_accuracy,
+        "final_direction_filtered_accuracy_ex_neutral": final_direction_filtered_accuracy,
         "filtered_actionable_num_samples": filtered_actionable_num_samples,
         "filtered_actionable_accuracy": filtered_actionable_accuracy,
+        "final_direction_filtered_actionable_accuracy": final_direction_filtered_actionable_accuracy,
         "asset_accuracy": asset_accuracy,
+        "asset_final_direction_accuracy": asset_final_direction_accuracy,
         "details": evaluation_df.to_dict(orient="records"),
     }
 

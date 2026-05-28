@@ -531,7 +531,7 @@ class WebTradingAnalyzer:
                 
                 provider_name = "Anthropic"
             else:  # qwen
-                api_key = os.environ.get("SILICONFLOW_API_KEY", "")
+                api_key = os.environ.get("MIMO_API_KEY", "") or self.config.get("mimo_api_key", "")
                 if not api_key:
                     return {
                         "valid": False,
@@ -540,15 +540,15 @@ class WebTradingAnalyzer:
                 
                 client = OpenAI(
                     api_key=api_key,
-                    base_url="https://api.siliconflow.cn/v1",
+                    base_url="https://token-plan-cn.xiaomimimo.com/v1",
                 )
                 _ = client.chat.completions.create(
-                    model="Qwen/Qwen3-Omni-30B-A3B-Thinking",
+                    model="mimo-v2.5-pro",
                     messages=[{"role": "user", "content": "Hello"}],
-                    max_tokens=5,
+                    max_completion_tokens=5,
                 )
 
-                provider_name = "SiliconFlow"
+                provider_name = "MiMo"
             return {"valid": True, "message": f"{provider_name} API key is valid"}
 
         except Exception as e:
@@ -562,7 +562,7 @@ class WebTradingAnalyzer:
             elif provider == "anthropic":
                 provider_name = "Anthropic"
             else:
-                provider_name = "Qwen"
+                provider_name = "MiMo"
 
             if (
                 "authentication" in error_msg.lower()
@@ -898,17 +898,14 @@ def update_provider():
             if not analyzer.config["graph_llm_model"].startswith("claude"):
                 analyzer.config["graph_llm_model"] = "claude-haiku-4-5-20251001"
         elif provider == "qwen":
-            # Set default Qwen models if not already set to Qwen models
-            if not analyzer.config["agent_llm_model"].startswith("qwen"):
-                analyzer.config["agent_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
-            if not analyzer.config["graph_llm_model"].startswith("qwen"):
-                analyzer.config["graph_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
+            analyzer.config["agent_llm_model"] = "mimo-v2.5-pro"
+            analyzer.config["graph_llm_model"] = "mimo-v2.5-pro"
             
         else:
             # Set default OpenAI models if not already set to OpenAI models
-            if analyzer.config["agent_llm_model"].startswith(("claude", "qwen")):
+            if analyzer.config["agent_llm_model"].startswith(("claude", "qwen", "mimo-")):
                 analyzer.config["agent_llm_model"] = "gpt-4o-mini"
-            if analyzer.config["graph_llm_model"].startswith(("claude", "qwen")):
+            if analyzer.config["graph_llm_model"].startswith(("claude", "qwen", "mimo-")):
                 analyzer.config["graph_llm_model"] = "gpt-4o"
         
         analyzer.trading_graph.config.update(analyzer.config)
@@ -948,7 +945,7 @@ def update_api_key():
         elif provider == "anthropic":
             os.environ["ANTHROPIC_API_KEY"] = new_api_key
         elif provider == "qwen":
-            os.environ["SILICONFLOW_API_KEY"] = new_api_key
+            os.environ["MIMO_API_KEY"] = new_api_key
 
         # Update the API key in the trading graph
         analyzer.trading_graph.update_api_key(new_api_key, provider=provider)
@@ -979,7 +976,7 @@ def get_api_key_status():
             if not api_key and hasattr(analyzer, 'config'):
                 api_key = analyzer.config.get("anthropic_api_key", "")
         elif provider == "qwen":
-            api_key = os.environ.get("SILICONFLOW_API_KEY", "")
+            api_key = os.environ.get("MIMO_API_KEY", "")
         else:
             api_key = ""
         

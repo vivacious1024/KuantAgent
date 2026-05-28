@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuantAgent - Analysis Results</title>
+    <title>KuantAgent - Analysis Results</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -462,8 +462,8 @@
             <div class="text-center">
                 <!-- Centered Logo and Title -->
                 <div style="display: flex; align-items: center; justify-content: center; gap: 0rem; margin-bottom: 1rem;">
-                    <img src="/assets/darklogo.png" alt="QuantAgent Logo" style="width: 7rem; height: 7rem; object-fit: contain; background: transparent; box-shadow: none; border: none; border-radius: 0; transform: translateY(0.5rem);">
-                    <span style="font-size: 4.0rem; font-weight: 700; color: white; line-height: 1.0;">QuantAgent</span>
+                    <img src="/assets/darklogo.png" alt="KuantAgent Logo" style="width: 7rem; height: 7rem; object-fit: contain; background: transparent; box-shadow: none; border: none; border-radius: 0; transform: translateY(0.5rem);">
+                    <span style="font-size: 4.0rem; font-weight: 700; color: white; line-height: 1.0;">KuantAgent</span>
                 </div>
                 <div class="text-center">
                     <!-- <h2 class="text-2xl font-semibold text-indigo-200 tracking-wide drop-shadow-sm">
@@ -485,7 +485,7 @@
          <div class="results-section">
                               <!-- Row 1: Analysis Summary, Final Decision, Technical Indicators -->
              <div class="panel-group">
-                                 <div class="panel">
+                 <div class="panel">
                     <h4 class="panel-title">
                         <i class="fas fa-chart-pie"></i> Analysis Summary
                     </h4>
@@ -508,6 +508,20 @@
                                  <div class="stats-label">Asset</div>
                              </div>
                          </div>
+                     </div>
+                 </div>
+
+                 <div class="panel">
+                     <h4 class="panel-title">
+                         <i class="fas fa-filter"></i> Data Processing Pipeline
+                     </h4>
+                     {% set pipeline = results.pipeline_summary if results.pipeline_summary else {} %}
+                     <div>
+                         <p><strong>Source:</strong> {{ pipeline.data_source if pipeline.data_source else 'Yahoo Finance live feed' }}</p>
+                         <p><strong>Raw Rows:</strong> {{ pipeline.raw_rows if pipeline.raw_rows else results.data_length }}</p>
+                         <p><strong>Normalized Rows:</strong> {{ pipeline.normalized_rows if pipeline.normalized_rows else results.data_length }}</p>
+                         <p><strong>Analysis Window:</strong> {{ pipeline.window_rows if pipeline.window_rows else results.data_length }} rows (window size {{ pipeline.window_size if pipeline.window_size else 45 }})</p>
+                         <p><strong>Time Span:</strong> {{ pipeline.first_timestamp if pipeline.first_timestamp else 'N/A' }} to {{ pipeline.last_timestamp if pipeline.last_timestamp else 'N/A' }}</p>
                      </div>
                  </div>
                  

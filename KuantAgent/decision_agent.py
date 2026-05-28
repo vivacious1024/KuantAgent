@@ -82,8 +82,289 @@ def _derive_base_decision(decision_features: Dict[str, object]) -> Tuple[str, fl
     short_score = float(decision_features.get("short_score", 0.0) or 0.0)
     base_confidence = float(decision_features.get("algorithmic_confidence", 0.0) or 0.0)
     signal_gate = str(decision_features.get("signal_gate", "directional"))
+    consensus_level = str(decision_features.get("consensus_level", "weak"))
+    dominance_ratio = float(decision_features.get("dominance_ratio", 0.0) or 0.0)
+    decision_authority_regime = str(decision_features.get("decision_authority_regime", "balanced_calibration"))
+    structure_confirmation_tier = str(decision_features.get("structure_confirmation_tier", "none"))
+    trend_failure_state = str(decision_features.get("trend_failure_state", "intact"))
+    structure_conflict = bool(decision_features.get("structure_conflict", False))
+    channel_dominance_score = float(decision_features.get("channel_dominance_score", 0.0) or 0.0)
+    structure_semantic_label = str(decision_features.get("structure_semantic_label", "neutral_structure"))
+    structure_semantic_score = float(decision_features.get("structure_semantic_score", 0.0) or 0.0)
+    breakout_authenticity_score = float(decision_features.get("breakout_authenticity_score", 0.0) or 0.0)
+    short_horizon_bias = str(decision_features.get("short_horizon_bias", "none"))
+    short_horizon_score = float(decision_features.get("short_horizon_score", 0.0) or 0.0)
+    continuation_bias = str(decision_features.get("continuation_bias", "none"))
+    continuation_score = float(decision_features.get("continuation_score", 0.0) or 0.0)
+    continuation_integrity_score = float(decision_features.get("continuation_integrity_score", 0.0) or 0.0)
+    continuation_integrity_state = str(decision_features.get("continuation_integrity_state", "medium"))
+    three_bar_majority_bias = str(decision_features.get("three_bar_majority_bias", "MIXED"))
+    three_bar_path_score = float(decision_features.get("three_bar_path_score", 0.0) or 0.0)
+    indicator_long_score = float(decision_features.get("indicator_long_score", 0.0) or 0.0)
+    indicator_short_score = float(decision_features.get("indicator_short_score", 0.0) or 0.0)
+    structure_break_state = str(decision_features.get("structure_break_state", "none"))
+    structure_followthrough_score = float(decision_features.get("structure_followthrough_score", 0.0) or 0.0)
+    structure_followthrough_state = str(decision_features.get("structure_followthrough_state", "medium"))
+    countertrend_pressure_score = float(decision_features.get("countertrend_pressure_score", 0.0) or 0.0)
+    countertrend_pressure_state = str(decision_features.get("countertrend_pressure_state", "low"))
+    candidate_pattern_summaries = list(decision_features.get("candidate_pattern_summaries", []) or [])
+    bullish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bearish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bullish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        ),
+        default=0.0,
+    )
+    bearish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        ),
+        default=0.0,
+    )
+    weak_bearish_trend_channel_conflict = (
+        dominant_side == "SHORT"
+        and structure_semantic_label == "trend_channel_continuation"
+        and decision_authority_regime in {"structure_present_execution_uncertain", "trend_inertia_priority"}
+        and breakout_authenticity_score < 0.07
+        and bearish_candidate_count == 0
+        and bullish_candidate_count >= 1
+        and bullish_candidate_top_conf >= 0.75
+        and short_horizon_bias == "none"
+        and three_bar_majority_bias == "SHORT"
+        and three_bar_path_score >= 0.9
+        and base_confidence <= 0.06
+    )
+    weak_late_bearish_trend_channel_conflict = (
+        dominant_side == "SHORT"
+        and structure_semantic_label == "trend_channel_continuation"
+        and decision_authority_regime == "trend_inertia_priority"
+        and trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+        and breakout_authenticity_score < 0.16
+        and structure_semantic_score <= 0.575
+        and continuation_bias == "bearish_continuation_candidate"
+        and continuation_score <= 1.98
+        and short_horizon_bias == "none"
+        and three_bar_majority_bias == "SHORT"
+        and three_bar_path_score >= 1.1
+        and base_confidence <= 0.16
+    )
+    ambiguous_bearish_trend_channel_conflict = (
+        dominant_side == "SHORT"
+        and structure_semantic_label == "trend_channel_continuation"
+        and decision_authority_regime == "trend_inertia_priority"
+        and trend_failure_state == "intact"
+        and breakout_authenticity_score < 0.18
+        and structure_semantic_score <= 0.58
+        and continuation_bias == "bearish_continuation_candidate"
+        and continuation_score <= 1.95
+        and bullish_candidate_count >= 1
+        and bullish_candidate_top_conf >= max(0.76, bearish_candidate_top_conf - 0.02)
+        and short_horizon_bias == "none"
+        and three_bar_majority_bias == "SHORT"
+        and three_bar_path_score >= 1.1
+        and base_confidence <= 0.22
+    )
+    weak_late_bullish_trend_channel_conflict = (
+        dominant_side == "LONG"
+        and structure_semantic_label == "trend_channel_continuation"
+        and decision_authority_regime == "trend_inertia_priority"
+        and trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+        and breakout_authenticity_score < 0.16
+        and structure_semantic_score <= 0.555
+        and channel_dominance_score <= 0.3
+        and structure_break_state == "bearish_break"
+        and indicator_short_score >= 0.25
+        and bearish_candidate_top_conf >= 0.85
+        and continuation_bias == "bullish_continuation_candidate"
+        and continuation_score <= 2.08
+        and short_horizon_bias == "none"
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_score >= 1.1
+        and base_confidence <= 0.19
+    )
+    fragile_bullish_reversal_conflict = (
+        dominant_side == "LONG"
+        and structure_semantic_label == "neutral_structure"
+        and decision_authority_regime == "structure_present_execution_uncertain"
+        and breakout_authenticity_score < 0.38
+        and indicator_short_score >= indicator_long_score + 0.8
+        and structure_break_state == "bearish_break"
+        and bearish_candidate_count >= 1
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_score >= 1.0
+        and base_confidence <= 0.06
+    )
+    fragile_path_only_bearish_continuation = (
+        dominant_side == "SHORT"
+        and structure_semantic_label == "trend_channel_continuation"
+        and decision_authority_regime == "trend_inertia_priority"
+        and trend_failure_state == "intact"
+        and breakout_authenticity_score < 0.06
+        and structure_followthrough_state == "low"
+        and structure_followthrough_score <= 0.22
+        and continuation_bias == "bearish_continuation_candidate"
+        and continuation_score <= 2.24
+        and bearish_candidate_count <= 1
+        and bearish_candidate_top_conf <= 0.8
+        and short_horizon_bias == "none"
+        and three_bar_majority_bias == "SHORT"
+        and three_bar_path_score >= 1.25
+        and base_confidence <= 0.28
+    )
+    fragile_bullish_release_pullback = (
+        dominant_side == "LONG"
+        and structure_semantic_label in {"hidden_base_release", "support_reclaim_rotation", "bullish_structure_break"}
+        and structure_confirmation_tier == "confirmed"
+        and breakout_authenticity_score < 0.38
+        and bearish_candidate_top_conf >= 0.72
+        and short_horizon_bias == "bearish_pullback_candidate"
+        and short_horizon_score >= 1.15
+        and trend_failure_state in {"intact", "early_failure", "probable_failure"}
+        and base_confidence <= 0.08
+    )
+    fragile_trend_inertia_reversal = (
+        dominant_side in {"LONG", "SHORT"}
+        and structure_semantic_label == "trend_channel_continuation"
+        and continuation_integrity_state == "low"
+        and continuation_integrity_score <= 0.34
+        and trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+        and structure_followthrough_state == "low"
+        and structure_followthrough_score <= 0.24
+        and breakout_authenticity_score < 0.22
+        and base_confidence <= 0.22
+        and (
+            (
+                dominant_side == "LONG"
+                and structure_break_state == "bearish_break"
+                and bearish_candidate_top_conf >= 0.82
+            )
+            or (
+                dominant_side == "SHORT"
+                and structure_break_state == "bullish_break"
+                and bullish_candidate_top_conf >= 0.82
+            )
+        )
+    )
+    fragile_confirmed_break_exhaustion = (
+        dominant_side == "SHORT"
+        and structure_semantic_label in {"bearish_structure_break", "hidden_distribution_release", "false_breakout_reentry"}
+        and structure_followthrough_state == "low"
+        and countertrend_pressure_state == "high"
+        and countertrend_pressure_score >= 0.48
+        and breakout_authenticity_score < 0.3
+        and base_confidence <= 0.08
+    )
+    weak_algorithmic_case = (
+        consensus_level != "strong"
+        or dominance_ratio < 0.2
+        or decision_authority_regime in {"balanced_calibration", "structure_present_execution_uncertain"}
+        or structure_conflict
+        or trend_failure_state != "intact"
+        or (structure_confirmation_tier == "confirmed" and channel_dominance_score < 0.26)
+    )
+    if weak_algorithmic_case:
+        base_confidence = max(0.04, base_confidence - 0.035)
+    if (
+        structure_semantic_label in {
+            "support_reclaim_rotation",
+            "resistance_failure_rotation",
+            "hidden_base_release",
+            "hidden_distribution_release",
+            "false_breakout_reentry",
+            "false_breakdown_reentry",
+            "bullish_structure_break",
+            "bearish_structure_break",
+        }
+        and structure_semantic_score >= 0.56
+        and decision_authority_regime in {
+            "balanced_calibration",
+            "structure_present_execution_uncertain",
+            "confirmed_structure_but_trend_failure_incomplete",
+        }
+    ):
+        base_confidence = max(0.04, base_confidence - 0.025)
 
     if dominant_side in {"LONG", "SHORT"}:
+        if (
+            dominant_side == "SHORT"
+            and structure_semantic_label == "trend_channel_continuation"
+            and decision_authority_regime in {"structure_present_execution_uncertain", "trend_inertia_priority"}
+            and breakout_authenticity_score < 0.07
+            and bearish_candidate_count == 0
+            and bullish_candidate_count >= 1
+            and bullish_candidate_top_conf >= 0.75
+            and short_horizon_bias == "none"
+            and three_bar_majority_bias == "SHORT"
+            and three_bar_path_score >= 0.9
+            and base_confidence <= 0.06
+        ):
+            return "LONG", max(0.06, base_confidence), "algorithm_weak_trend_channel_short_reversal_side"
+        if (
+            dominant_side == "SHORT"
+            and structure_semantic_label == "trend_channel_continuation"
+            and decision_authority_regime == "trend_inertia_priority"
+            and trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+            and breakout_authenticity_score < 0.16
+            and structure_semantic_score <= 0.575
+            and continuation_bias == "bearish_continuation_candidate"
+            and continuation_score <= 1.98
+            and short_horizon_bias == "none"
+            and three_bar_majority_bias == "SHORT"
+            and three_bar_path_score >= 1.1
+            and base_confidence <= 0.16
+        ):
+            return "LONG", max(0.08, base_confidence), "algorithm_late_bearish_trend_channel_reversal_side"
+        if fragile_path_only_bearish_continuation:
+            return "LONG", max(0.08, base_confidence), "algorithm_fragile_path_only_bearish_continuation_reversal_side"
+        if ambiguous_bearish_trend_channel_conflict:
+            return "LONG", max(0.08, base_confidence), "algorithm_ambiguous_bearish_trend_channel_reversal_side"
+        if (
+            dominant_side == "LONG"
+            and structure_semantic_label == "trend_channel_continuation"
+            and decision_authority_regime == "trend_inertia_priority"
+            and trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+            and breakout_authenticity_score < 0.16
+            and structure_semantic_score <= 0.555
+            and channel_dominance_score <= 0.3
+            and structure_break_state == "bearish_break"
+            and indicator_short_score >= 0.25
+            and bearish_candidate_top_conf >= 0.85
+            and continuation_bias == "bullish_continuation_candidate"
+            and continuation_score <= 2.08
+            and short_horizon_bias == "none"
+            and three_bar_majority_bias == "LONG"
+            and three_bar_path_score >= 1.1
+            and base_confidence <= 0.19
+        ):
+            return "SHORT", max(0.08, base_confidence), "algorithm_late_bullish_trend_channel_reversal_side"
+        if fragile_bullish_release_pullback:
+            return "SHORT", max(0.08, base_confidence), "algorithm_fragile_bullish_release_pullback_side"
+        if fragile_bullish_reversal_conflict:
+            return "SHORT", max(0.06, base_confidence), "algorithm_fragile_bullish_reversal_fallback_side"
+        if fragile_trend_inertia_reversal:
+            reversal_side = "SHORT" if dominant_side == "LONG" else "LONG"
+            return reversal_side, max(0.08, base_confidence), "algorithm_fragile_trend_inertia_reversal_side"
+        if fragile_confirmed_break_exhaustion:
+            return "LONG", max(0.08, base_confidence), "algorithm_fragile_confirmed_break_exhaustion_side"
         return dominant_side, base_confidence, "algorithm_directional"
 
     fallback_side = raw_dominant_side
@@ -91,6 +372,20 @@ def _derive_base_decision(decision_features: Dict[str, object]) -> Tuple[str, fl
         fallback_side = "LONG" if long_score >= short_score else "SHORT"
 
     fallback_confidence = min(0.18, max(base_confidence, 0.06))
+    ambiguous_bearish_abstain_conflict = (
+        signal_gate == "abstain"
+        and fallback_side == "SHORT"
+        and structure_semantic_label == "developing_double_top_pressure"
+        and decision_authority_regime == "structure_present_execution_uncertain"
+        and breakout_authenticity_score < 0.12
+        and bearish_candidate_count <= bullish_candidate_count
+        and bullish_candidate_top_conf >= max(0.7, bearish_candidate_top_conf - 0.1)
+        and short_horizon_bias == "none"
+        and three_bar_majority_bias == "SHORT"
+        and three_bar_path_score <= 0.62
+    )
+    if ambiguous_bearish_abstain_conflict:
+        return "LONG", fallback_confidence, "algorithm_abstained_ambiguous_bearish_fallback_reversal_side"
     if signal_gate == "abstain":
         return fallback_side, fallback_confidence, "algorithm_abstained_fallback_side"
     return fallback_side, fallback_confidence, "algorithm_fallback_side"
@@ -113,18 +408,206 @@ def _derive_structure_expert_view(decision_features: Dict[str, object]) -> Dict[
     reversal_confirmed = bool(decision_features.get("reversal_confirmed", False))
     three_bar_majority_bias = str(decision_features.get("three_bar_majority_bias", "MIXED"))
     three_bar_path_score = float(decision_features.get("three_bar_path_score", 0.0) or 0.0)
+    breakout_authenticity_score = float(decision_features.get("breakout_authenticity_score", 0.0) or 0.0)
+    indicator_long_score = float(decision_features.get("indicator_long_score", 0.0) or 0.0)
+    indicator_short_score = float(decision_features.get("indicator_short_score", 0.0) or 0.0)
+    structure_break_state = str(decision_features.get("structure_break_state", "none"))
+    structure_followthrough_score = float(decision_features.get("structure_followthrough_score", 0.0) or 0.0)
+    structure_followthrough_state = str(decision_features.get("structure_followthrough_state", "medium"))
+    countertrend_pressure_state = str(decision_features.get("countertrend_pressure_state", "low"))
+    continuation_integrity_score = float(decision_features.get("continuation_integrity_score", 0.0) or 0.0)
+    continuation_integrity_state = str(decision_features.get("continuation_integrity_state", "medium"))
+    continuation_bias = str(decision_features.get("continuation_bias", "none"))
+    continuation_score = float(decision_features.get("continuation_score", 0.0) or 0.0)
+    breakout_retest_quality = str(decision_features.get("breakout_retest_quality", "none"))
+    market_regime = str(decision_features.get("market_regime", "unknown"))
+    candidate_pattern_summaries = list(decision_features.get("candidate_pattern_summaries", []) or [])
+    short_horizon_bias = str(decision_features.get("short_horizon_bias", "none"))
+    short_horizon_score = float(decision_features.get("short_horizon_score", 0.0) or 0.0)
+    bullish_confirmed_candidates = [
+        item
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and bool(item.get("breakout_confirmed", False))
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.72
+    ]
+    bearish_confirmed_candidates = [
+        item
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        and bool(item.get("breakout_confirmed", False))
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.72
+    ]
+    bullish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bearish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bullish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        ),
+        default=0.0,
+    )
+    bearish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        ),
+        default=0.0,
+    )
+    ambiguous_bearish_candidate_conflict = (
+        structure_semantic_bias == "SHORT"
+        and structure_semantic_label in {
+            "developing_double_top_pressure",
+            "resistance_failure_rotation",
+            "bearish_structure_break",
+            "hidden_distribution_release",
+            "false_breakout_reentry",
+        }
+        and breakout_authenticity_score < 0.32
+        and not bearish_confirmed_candidates
+        and bearish_candidate_count <= bullish_candidate_count
+        and bullish_candidate_top_conf >= max(0.7, bearish_candidate_top_conf - 0.1)
+        and (
+            short_horizon_bias == "bullish_rebound_candidate"
+            or trend_failure_state in {"intact", "early_failure", "probable_failure"}
+        )
+    )
+    fragile_bullish_confirmed_break_conflict = (
+        structure_semantic_bias == "LONG"
+        and structure_semantic_label in {
+            "bullish_structure_break",
+            "support_reclaim_rotation",
+            "hidden_base_release",
+            "false_breakdown_reentry",
+        }
+        and breakout_authenticity_score < 0.24
+        and bearish_candidate_count >= 1
+        and bearish_candidate_top_conf >= 0.8
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_score <= 0.62
+        and trend_failure_state in {"intact", "early_failure", "probable_failure"}
+    )
+    fragile_neutral_bullish_reversal_conflict = (
+        structure_semantic_label == "neutral_structure"
+        and reversal_bias == "bullish_reversal"
+        and reversal_confirmed
+        and breakout_authenticity_score < 0.38
+        and indicator_short_score >= indicator_long_score + 0.8
+        and structure_break_state == "bearish_break"
+        and bearish_candidate_count >= 1
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_score >= 1.0
+    )
+    fragile_confirmed_structure_handoff = (
+        confirmed_structure_strength == "strong"
+        and structure_followthrough_state == "low"
+        and countertrend_pressure_state == "high"
+        and structure_semantic_label in {
+            "hidden_base_release",
+            "hidden_distribution_release",
+            "false_breakout_reentry",
+            "false_breakdown_reentry",
+            "support_reclaim_rotation",
+            "resistance_failure_rotation",
+            "bullish_structure_break",
+            "bearish_structure_break",
+        }
+    )
+    fragile_bullish_continuation_overextension = (
+        confirmed_structure_strength == "strong"
+        and structure_semantic_label == "hidden_base_release"
+        and structure_confirmation_tier == "confirmed"
+        and trend_failure_state == "intact"
+        and breakout_authenticity_score < 0.36
+        and breakout_retest_quality == "none"
+        and continuation_bias == "bullish_continuation_candidate"
+        and continuation_score >= 2.45
+        and bearish_candidate_top_conf >= 0.64
+        and short_horizon_bias == "none"
+    )
+    fragile_bullish_release_pullback_conflict = (
+        structure_semantic_bias == "LONG"
+        and structure_semantic_label in {"hidden_base_release", "support_reclaim_rotation", "bullish_structure_break"}
+        and structure_confirmation_tier == "confirmed"
+        and breakout_authenticity_score < 0.38
+        and bearish_candidate_top_conf >= 0.72
+        and short_horizon_bias == "bearish_pullback_candidate"
+        and short_horizon_score >= 1.15
+        and trend_failure_state in {"intact", "early_failure", "probable_failure"}
+    )
+    fragile_trend_channel_failure = (
+        structure_semantic_label == "trend_channel_continuation"
+        and structure_confirmation_tier == "developing"
+        and continuation_integrity_state == "low"
+        and continuation_integrity_score <= 0.34
+        and structure_followthrough_state == "low"
+        and trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+        and breakout_authenticity_score < 0.22
+        and (
+            (
+                structure_semantic_bias == "LONG"
+                and structure_break_state == "bearish_break"
+                and bearish_candidate_top_conf >= 0.82
+            )
+            or (
+                structure_semantic_bias == "SHORT"
+                and structure_break_state == "bullish_break"
+                and bullish_candidate_top_conf >= 0.82
+            )
+        )
+    )
 
     view = {
         "decision": "NONE",
         "confidence": 0.0,
         "reason": "no_structure_edge",
         "strength": "none",
+        "label": structure_semantic_label,
     }
+
+    if fragile_bullish_continuation_overextension:
+        confidence = 0.16
+        if bearish_candidate_top_conf >= 0.72:
+            confidence += 0.02
+        return {
+            "decision": "SHORT",
+            "confidence": _clip(confidence, 0.16, 0.3),
+            "reason": "fragile_bullish_continuation_overextension_structure",
+            "strength": "medium",
+            "label": structure_semantic_label,
+        }
 
     if (
         confirmed_structure_bias in {"LONG", "SHORT"}
         and confirmed_structure_strength == "strong"
         and structure_confirmation_tier == "confirmed"
+        and not (
+            structure_semantic_label in {"bullish_structure_break", "bearish_structure_break", "false_breakout_reentry", "false_breakdown_reentry"}
+            and market_regime in {"range", "compression"}
+            and breakout_authenticity_score < 0.28
+        and trend_failure_state == "intact"
+        )
+        and not ambiguous_bearish_candidate_conflict
+        and not fragile_bullish_confirmed_break_conflict
+        and not fragile_confirmed_structure_handoff
     ):
         confidence = 0.24 + min(0.16, max(confirmed_structure_score, structure_semantic_score) * 0.18)
         if decision_authority_regime == "confirmed_structure_priority":
@@ -140,12 +623,44 @@ def _derive_structure_expert_view(decision_features: Dict[str, object]) -> Dict[
             "confidence": _clip(confidence, 0.18, 0.52),
             "reason": f"strong_confirmed_structure:{structure_semantic_label}",
             "strength": "strong",
+            "label": structure_semantic_label,
+        }
+
+    if fragile_trend_channel_failure:
+        counter_decision = "SHORT" if structure_semantic_bias == "LONG" else "LONG"
+        confidence = 0.16
+        if trend_failure_state in {"probable_failure", "confirmed_failure"}:
+            confidence += 0.03
+        if three_bar_majority_bias == counter_decision:
+            confidence += 0.02
+        return {
+            "decision": counter_decision,
+            "confidence": _clip(confidence, 0.16, 0.34),
+            "reason": "fragile_trend_channel_failure_structure",
+            "strength": "medium",
+            "label": structure_semantic_label,
+        }
+
+    if fragile_bullish_release_pullback_conflict:
+        confidence = 0.16
+        if bearish_candidate_top_conf >= 0.82:
+            confidence += 0.03
+        if short_horizon_score >= 1.45:
+            confidence += 0.02
+        return {
+            "decision": "SHORT",
+            "confidence": _clip(confidence, 0.16, 0.32),
+            "reason": "fragile_bullish_release_pullback_structure",
+            "strength": "medium",
+            "label": structure_semantic_label,
         }
 
     if (
         structure_semantic_bias in {"LONG", "SHORT"}
         and structure_confirmation_tier == "confirmed"
         and structure_semantic_score >= 0.72
+        and not fragile_confirmed_structure_handoff
+        and not fragile_bullish_confirmed_break_conflict
     ):
         confidence = 0.2 + min(0.12, structure_semantic_score * 0.16)
         return {
@@ -153,6 +668,159 @@ def _derive_structure_expert_view(decision_features: Dict[str, object]) -> Dict[
             "confidence": _clip(confidence, 0.16, 0.42),
             "reason": f"confirmed_semantic_structure:{structure_semantic_label}",
             "strength": "medium",
+            "label": structure_semantic_label,
+        }
+
+    if (
+        structure_semantic_label == "neutral_structure"
+        and reversal_confirmed
+        and reversal_score >= 2.2
+        and breakout_authenticity_score >= 0.14
+        and three_bar_majority_bias in {"LONG", "SHORT"}
+        and three_bar_path_score >= 0.7
+        and not fragile_neutral_bullish_reversal_conflict
+    ):
+        reversal_decision = "LONG" if reversal_bias == "bullish_reversal" else "SHORT" if reversal_bias == "bearish_reversal" else "NONE"
+        if reversal_decision in {"LONG", "SHORT"}:
+            confidence = 0.18 + min(0.12, reversal_score * 0.05)
+            if three_bar_majority_bias == reversal_decision:
+                confidence += 0.03
+            return {
+                "decision": reversal_decision,
+                "confidence": _clip(confidence, 0.16, 0.38),
+                "reason": "confirmed_reversal_with_path_alignment",
+                "strength": "medium",
+                "label": structure_semantic_label,
+            }
+
+    if (
+        structure_semantic_label in {"support_reclaim_rotation", "false_breakdown_reentry"}
+        and structure_semantic_bias == "LONG"
+        and structure_semantic_score >= 0.56
+        and structure_confirmation_tier in {"developing", "confirmed"}
+        and (
+            trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+            or reversal_confirmed
+            or (three_bar_majority_bias == "LONG" and three_bar_path_score >= 0.48)
+        )
+    ):
+        confidence = 0.18 + min(0.14, structure_semantic_score * 0.16)
+        if trend_failure_state in {"probable_failure", "confirmed_failure"}:
+            confidence += 0.03
+        return {
+            "decision": "LONG",
+            "confidence": _clip(confidence, 0.16, 0.4),
+            "reason": f"bullish_rotation_structure:{structure_semantic_label}",
+            "strength": "medium",
+            "label": structure_semantic_label,
+        }
+
+    if (
+        structure_semantic_label in {"resistance_failure_rotation", "false_breakout_reentry"}
+        and structure_semantic_bias == "SHORT"
+        and structure_semantic_score >= 0.56
+        and structure_confirmation_tier in {"developing", "confirmed"}
+        and (
+            trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+            or reversal_confirmed
+            or (three_bar_majority_bias == "SHORT" and three_bar_path_score >= 0.48)
+        )
+        and not ambiguous_bearish_candidate_conflict
+    ):
+        confidence = 0.18 + min(0.14, structure_semantic_score * 0.16)
+        if trend_failure_state in {"probable_failure", "confirmed_failure"}:
+            confidence += 0.03
+        return {
+            "decision": "SHORT",
+            "confidence": _clip(confidence, 0.16, 0.4),
+            "reason": f"bearish_rotation_structure:{structure_semantic_label}",
+            "strength": "medium",
+            "label": structure_semantic_label,
+        }
+
+    if (
+        structure_semantic_label in {
+            "emerging_upside_rotation",
+            "developing_double_bottom_pressure",
+            "developing_bullish_flag_pressure",
+        }
+        and structure_semantic_bias == "LONG"
+        and structure_semantic_score >= 0.58
+        and (
+            three_bar_majority_bias == "LONG"
+            or three_bar_path_score >= 0.72
+            or breakout_authenticity_score >= 0.2
+            or reversal_confirmed
+        )
+    ):
+        confidence = 0.16 + min(0.12, structure_semantic_score * 0.14)
+        if three_bar_majority_bias == "LONG" and three_bar_path_score >= 0.72:
+            confidence += 0.03
+        return {
+            "decision": "LONG",
+            "confidence": _clip(confidence, 0.14, 0.36),
+            "reason": f"early_bullish_rotation_structure:{structure_semantic_label}",
+            "strength": "medium",
+            "label": structure_semantic_label,
+        }
+
+    if (
+        structure_semantic_label in {
+            "emerging_downside_rotation",
+            "developing_double_top_pressure",
+            "developing_bearish_flag_pressure",
+        }
+        and structure_semantic_bias == "SHORT"
+        and structure_semantic_score >= 0.58
+        and (
+            three_bar_majority_bias == "SHORT"
+            or three_bar_path_score >= 0.72
+            or breakout_authenticity_score >= 0.2
+            or reversal_confirmed
+        )
+        and not ambiguous_bearish_candidate_conflict
+    ):
+        confidence = 0.16 + min(0.12, structure_semantic_score * 0.14)
+        if three_bar_majority_bias == "SHORT" and three_bar_path_score >= 0.72:
+            confidence += 0.03
+        return {
+            "decision": "SHORT",
+            "confidence": _clip(confidence, 0.14, 0.36),
+            "reason": f"early_bearish_rotation_structure:{structure_semantic_label}",
+            "strength": "medium",
+            "label": structure_semantic_label,
+        }
+
+    if (
+        structure_semantic_label in {"developing_double_bottom_pressure", "support_reclaim_rotation", "neutral_structure"}
+        and bullish_confirmed_candidates
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_score >= 0.72
+        and breakout_authenticity_score >= 0.14
+    ):
+        confidence = 0.2 + min(0.14, three_bar_path_score * 0.08)
+        return {
+            "decision": "LONG",
+            "confidence": _clip(confidence, 0.18, 0.4),
+            "reason": "confirmed_bullish_candidate_with_path_alignment",
+            "strength": "medium",
+            "label": structure_semantic_label,
+        }
+
+    if (
+        structure_semantic_label in {"developing_double_top_pressure", "resistance_failure_rotation", "neutral_structure"}
+        and bearish_confirmed_candidates
+        and three_bar_majority_bias == "SHORT"
+        and three_bar_path_score >= 0.72
+        and breakout_authenticity_score >= 0.14
+    ):
+        confidence = 0.2 + min(0.14, three_bar_path_score * 0.08)
+        return {
+            "decision": "SHORT",
+            "confidence": _clip(confidence, 0.18, 0.4),
+            "reason": "confirmed_bearish_candidate_with_path_alignment",
+            "strength": "medium",
+            "label": structure_semantic_label,
         }
 
     if reversal_confirmed and reversal_score >= 2.25:
@@ -163,6 +831,7 @@ def _derive_structure_expert_view(decision_features: Dict[str, object]) -> Dict[
                 "confidence": _clip(0.16 + min(0.12, reversal_score * 0.06), 0.14, 0.34),
                 "reason": "confirmed_reversal_structure",
                 "strength": "medium",
+                "label": structure_semantic_label,
             }
 
     return view
@@ -181,11 +850,154 @@ def _arbitrate_experts(
     structure_confidence = float(structure_view.get("confidence", 0.0) or 0.0)
     structure_strength = str(structure_view.get("strength", "none"))
     structure_reason = str(structure_view.get("reason", "no_structure_edge"))
+    structure_label = str(structure_view.get("label", "neutral_structure"))
     decision_authority_regime = str(decision_features.get("decision_authority_regime", "balanced_calibration"))
     trend_failure_state = str(decision_features.get("trend_failure_state", "intact"))
     dominance_ratio = float(decision_features.get("dominance_ratio", 0.0) or 0.0)
     consensus_level = str(decision_features.get("consensus_level", "weak"))
     three_bar_majority_bias = str(decision_features.get("three_bar_majority_bias", "MIXED"))
+    three_bar_path_consistency = float(decision_features.get("three_bar_path_consistency", 0.0) or 0.0)
+    three_bar_path_score = float(decision_features.get("three_bar_path_score", 0.0) or 0.0)
+    breakout_authenticity_score = float(decision_features.get("breakout_authenticity_score", 0.0) or 0.0)
+    indicator_long_score = float(decision_features.get("indicator_long_score", 0.0) or 0.0)
+    indicator_short_score = float(decision_features.get("indicator_short_score", 0.0) or 0.0)
+    structure_break_state = str(decision_features.get("structure_break_state", "none"))
+    reversal_bias = str(decision_features.get("reversal_bias", "none"))
+    reversal_confirmed = bool(decision_features.get("reversal_confirmed", False))
+    market_regime = str(decision_features.get("market_regime", "unknown"))
+    candidate_pattern_summaries = list(decision_features.get("candidate_pattern_summaries", []) or [])
+    bullish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bearish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bullish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        ),
+        default=0.0,
+    )
+    bearish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        ),
+        default=0.0,
+    )
+    continuation_bias = str(decision_features.get("continuation_bias", "none"))
+    continuation_score = float(decision_features.get("continuation_score", 0.0) or 0.0)
+    continuation_integrity_score = float(decision_features.get("continuation_integrity_score", 0.0) or 0.0)
+    continuation_integrity_state = str(decision_features.get("continuation_integrity_state", "medium"))
+    short_horizon_bias = str(decision_features.get("short_horizon_bias", "none"))
+    short_horizon_score = float(decision_features.get("short_horizon_score", 0.0) or 0.0)
+    structure_followthrough_state = str(decision_features.get("structure_followthrough_state", "medium"))
+    countertrend_pressure_state = str(decision_features.get("countertrend_pressure_state", "low"))
+
+    ambiguous_bearish_rebound_rescue = (
+        algorithm_decision == "SHORT"
+        and structure_decision == "SHORT"
+        and structure_label in {
+            "developing_double_top_pressure",
+            "resistance_failure_rotation",
+            "bearish_structure_break",
+            "hidden_distribution_release",
+            "false_breakout_reentry",
+        }
+        and breakout_authenticity_score < 0.3
+        and bearish_candidate_count <= bullish_candidate_count
+        and bullish_candidate_top_conf >= max(0.7, bearish_candidate_top_conf - 0.1)
+        and algorithm_confidence <= 0.06
+        and (
+            short_horizon_bias == "bullish_rebound_candidate"
+            or trend_failure_state in {"intact", "early_failure", "probable_failure"}
+        )
+        and not (
+            structure_label == "hidden_distribution_release"
+            and short_horizon_bias != "bullish_rebound_candidate"
+            and three_bar_majority_bias != "LONG"
+        )
+        and not (
+            bearish_candidate_count >= 2
+            and three_bar_path_consistency >= 0.66
+            and three_bar_path_score >= 0.8
+        )
+    )
+    fragile_bearish_break_rebound_rescue = (
+        algorithm_decision == "SHORT"
+        and structure_decision == "SHORT"
+        and structure_label in {"bearish_structure_break", "hidden_distribution_release"}
+        and breakout_authenticity_score < 0.29
+        and short_horizon_bias == "bullish_rebound_candidate"
+        and short_horizon_score >= 1.35
+        and three_bar_path_consistency < 0.99
+    )
+    fragile_false_breakout_long_rebound_rescue = (
+        algorithm_decision == "SHORT"
+        and structure_decision == "SHORT"
+        and structure_label == "false_breakout_reentry"
+        and breakout_authenticity_score < 0.22
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_score <= 0.62
+        and bearish_candidate_count <= max(1, bullish_candidate_count)
+    )
+    fragile_false_breakout_structure_conflict_rescue = (
+        algorithm_decision == "LONG"
+        and structure_decision == "SHORT"
+        and structure_label == "false_breakout_reentry"
+        and decision_authority_regime == "confirmed_structure_but_trend_failure_incomplete"
+        and breakout_authenticity_score < 0.22
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_score <= 0.62
+        and algorithm_confidence <= 0.08
+        and bearish_candidate_count <= 1
+    )
+    fragile_neutral_bullish_consensus_fade = (
+        algorithm_decision == "LONG"
+        and structure_decision == "LONG"
+        and structure_label == "neutral_structure"
+        and structure_reason == "confirmed_reversal_with_path_alignment"
+        and breakout_authenticity_score < 0.35
+        and dominance_ratio <= 0.08
+        and indicator_short_score >= 1.7
+        and bullish_candidate_count >= 1
+        and bearish_candidate_count >= 1
+        and bearish_candidate_top_conf >= 0.8
+        and bullish_candidate_top_conf >= 0.85
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_consistency >= 0.99
+        and three_bar_path_score >= 1.2
+        and algorithm_confidence <= 0.08
+        and structure_confidence <= 0.34
+    )
+    fragile_trend_channel_failure_handoff = (
+        structure_reason == "fragile_trend_channel_failure_structure"
+        and structure_strength == "medium"
+        and continuation_integrity_state == "low"
+        and continuation_integrity_score <= 0.34
+        and structure_followthrough_state == "low"
+        and algorithm_confidence <= 0.22
+    )
+    fragile_soft_bearish_handoff = (
+        structure_strength == "medium"
+        and structure_label in {"bearish_structure_break", "hidden_distribution_release", "false_breakout_reentry"}
+        and structure_followthrough_state == "low"
+        and countertrend_pressure_state == "high"
+        and breakout_authenticity_score < 0.3
+    )
 
     arbitration = {
         "winner": "algorithm",
@@ -196,6 +1008,60 @@ def _arbitrate_experts(
     if structure_decision not in {"LONG", "SHORT"}:
         return algorithm_decision, algorithm_confidence, algorithm_source, arbitration
 
+    if ambiguous_bearish_rebound_rescue:
+        arbitration["winner"] = "rebound_rescue"
+        arbitration["reason"] = "ambiguous_bearish_structure_without_confirmed_breakdown"
+        rebound_confidence = max(0.18, min(0.34, max(algorithm_confidence, structure_confidence) - 0.1))
+        return "LONG", rebound_confidence, "expert_arbiter_ambiguous_bearish_rebound_rescue", arbitration
+
+    if fragile_bearish_break_rebound_rescue:
+        arbitration["winner"] = "rebound_rescue"
+        arbitration["reason"] = "fragile_bearish_break_is_still_exposed_to_rebound"
+        rebound_confidence = max(0.18, min(0.32, max(algorithm_confidence, structure_confidence) - 0.09))
+        return "LONG", rebound_confidence, "expert_arbiter_fragile_bearish_break_rebound_rescue", arbitration
+
+    if fragile_false_breakout_long_rebound_rescue:
+        arbitration["winner"] = "rebound_rescue"
+        arbitration["reason"] = "fragile_false_breakout_reclaim_still_favors_rebound"
+        rebound_confidence = max(0.18, min(0.3, max(algorithm_confidence, structure_confidence) - 0.1))
+        return "LONG", rebound_confidence, "expert_arbiter_fragile_false_breakout_rebound_rescue", arbitration
+
+    if fragile_false_breakout_structure_conflict_rescue:
+        arbitration["winner"] = "rebound_rescue"
+        arbitration["reason"] = "fragile_false_breakout_structure_conflict_still_favors_rebound"
+        rebound_confidence = max(0.16, min(0.28, max(algorithm_confidence, structure_confidence) - 0.12))
+        return "LONG", rebound_confidence, "expert_arbiter_fragile_false_breakout_structure_conflict_rescue", arbitration
+
+    if fragile_neutral_bullish_consensus_fade:
+        arbitration["winner"] = "consensus_fade"
+        arbitration["reason"] = "fragile_neutral_bullish_reversal_without_breakout_confirmation"
+        fade_confidence = _clip(max(algorithm_confidence, 0.08), 0.08, 0.18)
+        return "SHORT", fade_confidence, "expert_arbiter_fragile_neutral_reversal_consensus_fade", arbitration
+
+    if fragile_trend_channel_failure_handoff:
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = "trend_channel_integrity_has_failed"
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.16, 0.34),
+            "expert_arbiter_fragile_trend_channel_failure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_reason == "fragile_bullish_continuation_overextension_structure"
+        and structure_label == "hidden_base_release"
+        and algorithm_decision == "LONG"
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = "confirmed_bullish_continuation_is_overextended"
+        return (
+            "SHORT",
+            _clip(max(structure_confidence, 0.16), 0.16, 0.28),
+            "expert_arbiter_fragile_bullish_continuation_overextension_wins",
+            arbitration,
+        )
+
     if structure_decision == algorithm_decision:
         merged_confidence = _clip(max(algorithm_confidence, structure_confidence), 0.06, 0.62)
         arbitration["winner"] = "consensus"
@@ -205,6 +1071,12 @@ def _arbitrate_experts(
     if (
         decision_authority_regime in {"confirmed_structure_priority", "confirmed_structure_but_trend_failure_incomplete"}
         and structure_strength == "strong"
+        and not (
+            structure_label in {"bullish_structure_break", "bearish_structure_break", "false_breakout_reentry", "false_breakdown_reentry"}
+            and market_regime in {"range", "compression"}
+            and breakout_authenticity_score < 0.28
+            and trend_failure_state == "intact"
+        )
         and (
             trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
             or decision_authority_regime == "confirmed_structure_but_trend_failure_incomplete"
@@ -225,10 +1097,48 @@ def _arbitrate_experts(
         )
 
     if (
+        structure_strength == "strong"
+        and structure_label in {
+            "support_reclaim_rotation",
+            "resistance_failure_rotation",
+            "hidden_base_release",
+            "hidden_distribution_release",
+            "false_breakout_reentry",
+            "false_breakdown_reentry",
+            "bullish_structure_break",
+            "bearish_structure_break",
+        }
+        and decision_authority_regime in {"balanced_calibration", "structure_present_execution_uncertain"}
+        and algorithm_confidence <= 0.1
+        and (
+            trend_failure_state in {"probable_failure", "confirmed_failure"}
+            or (
+                three_bar_majority_bias == structure_decision
+                and breakout_authenticity_score >= 0.28
+            )
+        )
+        and not (
+            structure_label in {"bullish_structure_break", "bearish_structure_break", "false_breakout_reentry", "false_breakdown_reentry"}
+            and market_regime in {"range", "compression"}
+            and breakout_authenticity_score < 0.22
+            and trend_failure_state == "intact"
+        )
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.18, 0.54),
+            "expert_arbiter_confirmed_structure_rescue",
+            arbitration,
+        )
+
+    if (
         structure_strength == "medium"
         and consensus_level != "strong"
         and algorithm_confidence <= 0.14
         and dominance_ratio <= 0.18
+        and not fragile_soft_bearish_handoff
     ):
         arbitration["winner"] = "structure"
         arbitration["reason"] = structure_reason
@@ -236,6 +1146,214 @@ def _arbitrate_experts(
             structure_decision,
             _clip(max(algorithm_confidence, structure_confidence), 0.14, 0.44),
             "expert_arbiter_soft_structure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_strength == "medium"
+        and structure_label in {"support_reclaim_rotation", "false_breakdown_reentry", "resistance_failure_rotation", "false_breakout_reentry"}
+        and algorithm_confidence <= 0.22
+        and dominance_ratio <= 0.28
+        and not (
+            market_regime in {"range", "compression"}
+            and breakout_authenticity_score < 0.24
+            and trend_failure_state == "intact"
+        )
+        and (
+            trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+            or three_bar_majority_bias == structure_decision
+        )
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.16, 0.46),
+            "expert_arbiter_rotation_structure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_strength in {"medium", "strong"}
+        and structure_label in {
+            "support_reclaim_rotation",
+            "resistance_failure_rotation",
+            "hidden_base_release",
+            "hidden_distribution_release",
+            "false_breakout_reentry",
+            "false_breakdown_reentry",
+            "bullish_structure_break",
+            "bearish_structure_break",
+        }
+        and decision_authority_regime == "balanced_calibration"
+        and consensus_level != "strong"
+        and algorithm_confidence <= 0.23
+        and dominance_ratio <= 0.34
+        and (
+            three_bar_majority_bias == structure_decision
+            or breakout_authenticity_score >= 0.28
+            or trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+        )
+        and not (
+            structure_label in {"bullish_structure_break", "bearish_structure_break", "false_breakout_reentry", "false_breakdown_reentry"}
+            and market_regime in {"range", "compression"}
+            and breakout_authenticity_score < 0.22
+            and trend_failure_state == "intact"
+        )
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.16, 0.48),
+            "expert_arbiter_balanced_structure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_strength == "medium"
+        and structure_reason in {"confirmed_bullish_candidate_with_path_alignment", "confirmed_bearish_candidate_with_path_alignment"}
+        and consensus_level != "strong"
+        and algorithm_confidence <= 0.24
+        and dominance_ratio <= 0.34
+        and three_bar_majority_bias == structure_decision
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.18, 0.44),
+            "expert_arbiter_candidate_structure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_strength == "medium"
+        and structure_reason == "confirmed_reversal_with_path_alignment"
+        and consensus_level != "strong"
+        and algorithm_confidence <= 0.22
+        and dominance_ratio <= 0.3
+        and three_bar_majority_bias == structure_decision
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.16, 0.42),
+            "expert_arbiter_reversal_path_structure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_strength == "medium"
+        and structure_label in {
+            "emerging_upside_rotation",
+            "emerging_downside_rotation",
+            "developing_double_bottom_pressure",
+            "developing_double_top_pressure",
+            "developing_bullish_flag_pressure",
+            "developing_bearish_flag_pressure",
+        }
+        and consensus_level != "strong"
+        and algorithm_confidence <= 0.16
+        and dominance_ratio <= 0.22
+        and three_bar_majority_bias == structure_decision
+        and not (
+            market_regime in {"range", "compression"}
+            and breakout_authenticity_score < 0.18
+            and trend_failure_state == "intact"
+        )
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.14, 0.38),
+            "expert_arbiter_early_structure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_strength == "medium"
+        and structure_label in {"developing_double_bottom_pressure", "developing_double_top_pressure"}
+        and decision_authority_regime == "balanced_calibration"
+        and algorithm_confidence <= 0.06
+        and three_bar_majority_bias == structure_decision
+        and three_bar_path_consistency >= 0.66
+        and three_bar_path_score >= 0.82
+        and (
+            (structure_decision == "LONG" and bullish_candidate_count >= 2)
+            or (structure_decision == "SHORT" and bearish_candidate_count >= 2)
+        )
+        and not (
+            continuation_bias == "bullish_continuation_candidate"
+            and continuation_score >= 1.9
+            and structure_decision == "SHORT"
+        )
+        and not (
+            continuation_bias == "bearish_continuation_candidate"
+            and continuation_score >= 1.9
+            and structure_decision == "LONG"
+        )
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.16, 0.4),
+            "expert_arbiter_candidate_backed_early_structure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_strength == "medium"
+        and structure_label == "developing_double_bottom_pressure"
+        and structure_decision == "LONG"
+        and decision_authority_regime == "structure_present_execution_uncertain"
+        and algorithm_confidence <= 0.05
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_consistency >= 0.66
+        and three_bar_path_score >= 0.58
+        and structure_confidence >= 0.24
+        and bullish_candidate_count >= 1
+        and breakout_authenticity_score >= 0.05
+        and not (
+            continuation_bias == "bearish_continuation_candidate"
+            and continuation_score >= 1.85
+        )
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.14, 0.34),
+            "expert_arbiter_fragile_bullish_early_structure_wins",
+            arbitration,
+        )
+
+    if (
+        structure_strength == "medium"
+        and structure_label in {
+            "emerging_upside_rotation",
+            "emerging_downside_rotation",
+            "developing_double_bottom_pressure",
+            "developing_double_top_pressure",
+            "developing_bullish_flag_pressure",
+            "developing_bearish_flag_pressure",
+        }
+        and decision_authority_regime in {"balanced_calibration", "structure_present_execution_uncertain"}
+        and algorithm_confidence <= 0.08
+        and three_bar_majority_bias == structure_decision
+        and three_bar_path_consistency >= 0.99
+        and three_bar_path_score >= 0.82
+        and breakout_authenticity_score >= 0.16
+    ):
+        arbitration["winner"] = "structure"
+        arbitration["reason"] = structure_reason
+        return (
+            structure_decision,
+            _clip(max(algorithm_confidence, structure_confidence), 0.16, 0.4),
+            "expert_arbiter_path_locked_early_structure_wins",
             arbitration,
         )
 
@@ -288,6 +1406,54 @@ def _count_override_signals(
     signal_conflict_count = int(decision_features.get("signal_conflict_count", 0) or 0)
     decision_authority_regime = str(decision_features.get("decision_authority_regime", "balanced_calibration"))
     authority_owner = str(decision_features.get("authority_owner", "shared"))
+    breakout_authenticity_score = float(decision_features.get("breakout_authenticity_score", 0.0) or 0.0)
+    candidate_pattern_summaries = list(decision_features.get("candidate_pattern_summaries", []) or [])
+    bullish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bearish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bullish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        ),
+        default=0.0,
+    )
+    bearish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        ),
+        default=0.0,
+    )
+    ambiguous_bearish_candidate_conflict = (
+        base_decision == "SHORT"
+        and structure_semantic_label in {
+            "developing_double_top_pressure",
+            "resistance_failure_rotation",
+            "bearish_structure_break",
+            "hidden_distribution_release",
+            "false_breakout_reentry",
+        }
+        and breakout_state != "bearish_breakdown"
+        and breakout_authenticity_score < 0.3
+        and bearish_candidate_count <= bullish_candidate_count
+        and bullish_candidate_top_conf >= max(0.7, bearish_candidate_top_conf - 0.1)
+    )
 
     override_count = 0
 
@@ -421,6 +1587,12 @@ def _count_override_signals(
         ):
             override_count += 1
             reasons.append("short-horizon rebound evidence contradicts SHORT")
+        if ambiguous_bearish_candidate_conflict:
+            override_count += 1
+            reasons.append("bearish structure is ambiguous because an equally strong bullish candidate still survives without a confirmed breakdown")
+        if short_horizon_bias == "bullish_rebound_candidate" and short_horizon_score >= 1.45:
+            override_count += 1
+            reasons.append("three-bar horizon still contains a meaningful rebound risk against SHORT")
 
     # Strong algorithmic consensus raises the threshold by making overrides rarer.
     if consensus_level == "strong":
@@ -459,15 +1631,19 @@ def _override_allowed(base_decision: str, proposed_decision: str, decision_featu
     confirmed_structure_bias = str(decision_features.get("confirmed_structure_bias", "NONE")).upper()
     confirmed_structure_score = float(decision_features.get("confirmed_structure_score", 0.0) or 0.0)
     confirmed_structure_strength = str(decision_features.get("confirmed_structure_strength", "none"))
+    structure_semantic_label = str(decision_features.get("structure_semantic_label", "neutral_structure"))
     structure_semantic_bias = str(decision_features.get("structure_semantic_bias", "NONE")).upper()
     structure_semantic_score = float(decision_features.get("structure_semantic_score", 0.0) or 0.0)
     structure_confirmation_tier = str(decision_features.get("structure_confirmation_tier", "none"))
+    structure_followthrough_state = str(decision_features.get("structure_followthrough_state", "medium"))
+    countertrend_pressure_state = str(decision_features.get("countertrend_pressure_state", "low"))
     channel_dominance_bias = str(decision_features.get("channel_dominance_bias", "NONE")).upper()
     channel_dominance_score = float(decision_features.get("channel_dominance_score", 0.0) or 0.0)
     structure_conflict = bool(decision_features.get("structure_conflict", False))
     signal_conflict_count = int(decision_features.get("signal_conflict_count", 0) or 0)
     decision_authority_regime = str(decision_features.get("decision_authority_regime", "balanced_calibration"))
     authority_owner = str(decision_features.get("authority_owner", "shared"))
+    breakout_authenticity_score = float(decision_features.get("breakout_authenticity_score", 0.0) or 0.0)
 
     # Keep overrides rare: algorithms still own the base direction in the
     # intended 80/20 design. AI may intervene only when the base edge is weak.
@@ -486,6 +1662,15 @@ def _override_allowed(base_decision: str, proposed_decision: str, decision_featu
         structure_conflict
         and signal_conflict_count >= 1
         and confirmed_structure_bias != proposed_decision
+    ):
+        return False
+    if (
+        base_decision == "LONG"
+        and proposed_decision == "SHORT"
+        and structure_semantic_label in {"bearish_structure_break", "hidden_distribution_release", "false_breakout_reentry"}
+        and structure_followthrough_state == "low"
+        and countertrend_pressure_state == "high"
+        and breakout_authenticity_score < 0.3
     ):
         return False
     if (
@@ -593,6 +1778,7 @@ def _determine_intervention_policy(
     confirmed_structure_bias = str(decision_features.get("confirmed_structure_bias", "NONE")).upper()
     confirmed_structure_score = float(decision_features.get("confirmed_structure_score", 0.0) or 0.0)
     confirmed_structure_strength = str(decision_features.get("confirmed_structure_strength", "none"))
+    structure_semantic_label = str(decision_features.get("structure_semantic_label", "neutral_structure"))
     structure_semantic_score = float(decision_features.get("structure_semantic_score", 0.0) or 0.0)
     structure_confirmation_tier = str(decision_features.get("structure_confirmation_tier", "none"))
     structure_conflict = bool(decision_features.get("structure_conflict", False))
@@ -600,6 +1786,34 @@ def _determine_intervention_policy(
     authority_owner = str(decision_features.get("authority_owner", "shared"))
     trend_failure_state = str(decision_features.get("trend_failure_state", "intact"))
     trend_failure_score = float(decision_features.get("trend_failure_score", 0.0) or 0.0)
+    breakout_authenticity_score = float(decision_features.get("breakout_authenticity_score", 0.0) or 0.0)
+    candidate_pattern_summaries = list(decision_features.get("candidate_pattern_summaries", []) or [])
+    bullish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bullish_candidate_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        ),
+        default=0.0,
+    )
+    fragile_false_breakout_handoff = (
+        decision_authority_regime == "confirmed_structure_but_trend_failure_incomplete"
+        and structure_semantic_label == "false_breakout_reentry"
+        and confirmed_structure_bias == "SHORT"
+        and confirmed_structure_strength == "strong"
+        and breakout_authenticity_score < 0.22
+        and bullish_candidate_count >= 1
+        and bullish_candidate_top_conf >= 0.9
+        and three_bar_path_score <= 0.62
+    )
 
     if signal_gate == "abstain" or consensus_level == "watchlist" or "abstained" in base_source:
         return (
@@ -627,6 +1841,24 @@ def _determine_intervention_policy(
         return (
             "limited_override",
             "A structure exists, but execution quality is weak, so AI may calibrate direction cautiously without treating this as a full hard-skip setup.",
+        )
+
+    if fragile_false_breakout_handoff:
+        return (
+            "confidence_only",
+            "This false-breakout handoff is still fragile because the bearish reclaim is weak while a strong bullish candidate remains active, so AI should reduce confidence rather than flip direction.",
+        )
+
+    if "fragile_confirmed_break_exhaustion" in base_source:
+        return (
+            "confidence_only",
+            "This confirmed break is already showing exhaustion pressure and weak follow-through, so AI should calibrate confidence rather than reactivate the stale continuation thesis.",
+        )
+
+    if "fragile_trend_inertia_reversal" in base_source:
+        return (
+            "confidence_only",
+            "Trend inertia has already been downgraded because continuation integrity is weak, so AI should avoid restoring the stale channel narrative without fresh confirmation.",
         )
 
     if (
@@ -825,6 +2057,7 @@ def _compose_final_result(
     three_bar_path_consistency = float(decision_features.get("three_bar_path_consistency", 0.0) or 0.0)
     confirmed_structure_bias = str(decision_features.get("confirmed_structure_bias", "NONE")).upper()
     confirmed_structure_score = float(decision_features.get("confirmed_structure_score", 0.0) or 0.0)
+    confirmed_structure_strength = str(decision_features.get("confirmed_structure_strength", "none"))
     structure_confirmation_tier = str(decision_features.get("structure_confirmation_tier", "none"))
     structure_semantic_bias = str(decision_features.get("structure_semantic_bias", "NONE")).upper()
     channel_dominance_bias = str(decision_features.get("channel_dominance_bias", "NONE")).upper()
@@ -1018,6 +2251,9 @@ def _compose_final_result(
 
     location_state = str(trend_features.get("location_state", "unknown"))
     breakout_state = str(trend_features.get("breakout_state", "unknown"))
+    trend_failure_state = str(decision_features.get("trend_failure_state", "intact"))
+    structure_semantic_label = str(decision_features.get("structure_semantic_label", "neutral_structure"))
+    breakout_authenticity_score = float(decision_features.get("breakout_authenticity_score", 0.0) or 0.0)
     poor_long_location = final_decision == "LONG" and location_state == "near_resistance" and breakout_state != "bullish_breakout"
     poor_short_location = final_decision == "SHORT" and location_state == "near_support" and breakout_state != "bearish_breakdown"
     false_breakout_risk = str(risk_features.get("false_breakout_risk", "unknown"))
@@ -1059,6 +2295,95 @@ def _compose_final_result(
         medium_quality_skip_candidate = False
     if continuation_bias != "none" and continuation_score >= 1.9 and not poor_long_location and not poor_short_location:
         medium_quality_skip_candidate = False
+    path_execution_guard = (
+        forecast_horizon_bars >= 3
+        and three_bar_majority_bias == final_decision
+        and three_bar_path_consistency >= 0.99
+        and three_bar_path_score >= 0.72
+        and not poor_long_location
+        and not poor_short_location
+        and false_breakout_risk != "high"
+        and signal_quality in {"high", "medium"}
+    )
+    confirmed_structure_execution_guard = (
+        structure_confirmation_tier == "confirmed"
+        and structure_semantic_label != "neutral_structure"
+        and (
+            confirmed_structure_strength == "strong"
+            or confirmed_structure_score >= 0.22
+        )
+    )
+    rotation_structure_execution_guard = (
+        structure_semantic_label in {
+            "support_reclaim_rotation",
+            "resistance_failure_rotation",
+            "false_breakout_reentry",
+            "false_breakdown_reentry",
+        }
+        and structure_semantic_bias == final_decision
+        and signal_quality in {"high", "medium"}
+    )
+    early_structure_execution_guard = (
+        structure_semantic_label in {
+            "developing_double_bottom_pressure",
+            "developing_double_top_pressure",
+            "developing_bullish_flag_pressure",
+            "developing_bearish_flag_pressure",
+            "emerging_upside_rotation",
+            "emerging_downside_rotation",
+        }
+        and structure_semantic_bias == final_decision
+        and three_bar_majority_bias == final_decision
+        and three_bar_path_consistency >= 0.66
+        and three_bar_path_score >= 0.8
+        and breakout_authenticity_score >= 0.2
+        and signal_quality in {"high", "medium"}
+    )
+    consensus_structure_execution_guard = (
+        str((decision_features.get("expert_arbitration") or {}).get("winner", "")) == "consensus"
+        and structure_semantic_label != "neutral_structure"
+        and structure_semantic_bias == final_decision
+        and three_bar_majority_bias == final_decision
+        and three_bar_path_consistency >= 0.66
+        and three_bar_path_score >= 0.62
+        and signal_quality in {"high", "medium"}
+    )
+    if (
+        confirmed_structure_execution_guard
+        and signal_quality in {"high", "medium"}
+        and (
+            decision_authority_regime in {
+                "confirmed_structure_priority",
+                "confirmed_structure_but_trend_failure_incomplete",
+            }
+            or breakout_authenticity_score >= 0.22
+            or trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+        )
+    ):
+        low_quality_skip_candidate = False
+        medium_quality_skip_candidate = False
+        if execution_advice == "skip":
+            execution_advice = "cautious"
+    elif path_execution_guard and execution_advice == "skip":
+        medium_quality_skip_candidate = False
+        execution_advice = "cautious"
+    elif (
+        rotation_structure_execution_guard
+        and execution_advice == "skip"
+        and not (
+            weak_environment
+            and false_breakout_risk == "high"
+            and ((poor_long_location and final_decision == "LONG") or (poor_short_location and final_decision == "SHORT"))
+        )
+    ):
+        medium_quality_skip_candidate = False
+        execution_advice = "cautious"
+    elif consensus_structure_execution_guard and execution_advice == "skip":
+        medium_quality_skip_candidate = False
+        execution_advice = "cautious"
+    elif early_structure_execution_guard and execution_advice == "skip":
+        medium_quality_skip_candidate = False
+        execution_advice = "cautious"
     if low_quality_skip_candidate:
         skip_execution = True
         final_confidence = min(final_confidence, 0.05)
@@ -1093,6 +2418,12 @@ def _compose_final_result(
     ):
         execution_advice = "cautious"
     if continuation_bias != "none" and continuation_score >= 1.9 and execution_advice == "skip":
+        execution_advice = "cautious"
+    if (
+        confirmed_structure_execution_guard
+        and execution_advice == "skip"
+        and signal_quality in {"high", "medium"}
+    ):
         execution_advice = "cautious"
     if reversal_confirmed and override_applied:
         final_confidence = max(final_confidence, 0.18)
@@ -1479,23 +2810,88 @@ Trend report:
 
         response = invoke_with_retry(llm.invoke, prompt)
         ai_output = _extract_json_block(getattr(response, "content", ""))
-        final_result = _compose_final_result(
-            base_decision=base_decision,
-            base_confidence=base_confidence,
-            base_source=base_source,
-            ai_output=ai_output,
-            indicator_features=indicator_features,
-            pattern_features=pattern_features,
-            trend_features=trend_features,
-            risk_features=risk_features,
-            decision_features=decision_features,
-            case_context=case_context,
-            macro_context={
-                "macro_timeframe": macro_timeframe,
-                "macro_bias": case_context.get("macro_bias", "") if isinstance(case_context, dict) else "",
-                "macro_change_pct": case_context.get("macro_change_pct", 0.0) if isinstance(case_context, dict) else 0.0,
-            },
-        )
+        try:
+            final_result = _compose_final_result(
+                base_decision=base_decision,
+                base_confidence=base_confidence,
+                base_source=base_source,
+                ai_output=ai_output,
+                indicator_features=indicator_features,
+                pattern_features=pattern_features,
+                trend_features=trend_features,
+                risk_features=risk_features,
+                decision_features=decision_features,
+                case_context=case_context,
+                macro_context={
+                    "macro_timeframe": macro_timeframe,
+                    "macro_bias": case_context.get("macro_bias", "") if isinstance(case_context, dict) else "",
+                    "macro_change_pct": case_context.get("macro_change_pct", 0.0) if isinstance(case_context, dict) else 0.0,
+                },
+            )
+        except Exception as exc:
+            print(
+                f"Decision result composition fallback triggered: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            final_result = {
+                "forecast_horizon": f"next {forecast_horizon_bars} bars",
+                "forecast_horizon_bars": forecast_horizon_bars,
+                "model_role": "decision_calibrator",
+                "decision": base_decision,
+                "confidence": round(_clip(base_confidence, 0.04, 0.35), 4),
+                "justification": f"Fallback used after decision composition error: {exc}. Base decision was preserved to avoid system failure.",
+                "risk_reward_ratio": 1.5,
+                "base_decision": base_decision,
+                "base_confidence": base_confidence,
+                "base_source": base_source,
+                "expert_arbitration": decision_features.get("expert_arbitration", {}),
+                "algorithm_expert_decision": decision_features.get("algorithm_expert_decision", base_decision),
+                "algorithm_expert_confidence": decision_features.get("algorithm_expert_confidence", base_confidence),
+                "structure_expert_view": decision_features.get("structure_expert_view", {}),
+                "intervention_policy": intervention_policy,
+                "ai_action": "follow",
+                "signal_quality": "medium",
+                "execution_advice": "cautious",
+                "override_candidate": "NONE",
+                "override_signal_count": 0,
+                "override_gate_open": False,
+                "override_applied": False,
+                "calibration_applied": False,
+                "hard_case_score": decision_features.get("hard_case_score", 0.0),
+                "execution_grade": decision_features.get("execution_grade", "C"),
+                "reversal_bias": decision_features.get("reversal_bias", "none"),
+                "reversal_score": decision_features.get("reversal_score", 0.0),
+                "reversal_confirmed": decision_features.get("reversal_confirmed", False),
+                "continuation_bias": decision_features.get("continuation_bias", "none"),
+                "continuation_score": decision_features.get("continuation_score", 0.0),
+                "short_horizon_bias": decision_features.get("short_horizon_bias", "none"),
+                "short_horizon_score": decision_features.get("short_horizon_score", 0.0),
+                "pattern_geometry_score": decision_features.get("pattern_geometry_score", 0.0),
+                "breakout_authenticity_score": decision_features.get("breakout_authenticity_score", 0.0),
+                "breakout_body_ratio": decision_features.get("breakout_body_ratio", 0.0),
+                "breakout_retest_quality": decision_features.get("breakout_retest_quality", "none"),
+                "structure_semantic_label": decision_features.get("structure_semantic_label", "neutral_structure"),
+                "structure_semantic_bias": decision_features.get("structure_semantic_bias", "NONE"),
+                "structure_semantic_score": decision_features.get("structure_semantic_score", 0.0),
+                "structure_confirmation_tier": decision_features.get("structure_confirmation_tier", "none"),
+                "confirmed_structure_strength": decision_features.get("confirmed_structure_strength", "none"),
+                "path_semantic_role": decision_features.get("path_semantic_role", "support_only"),
+                "three_bar_path": decision_features.get("three_bar_path", []),
+                "three_bar_majority_bias": decision_features.get("three_bar_majority_bias", "MIXED"),
+                "three_bar_path_consistency": decision_features.get("three_bar_path_consistency", 0.0),
+                "three_bar_path_score": decision_features.get("three_bar_path_score", 0.0),
+                "trend_alignment_state": decision_features.get("trend_alignment_state", "mixed_transition"),
+                "decision_authority_regime": decision_features.get("decision_authority_regime", "balanced_calibration"),
+                "authority_owner": decision_features.get("authority_owner", "shared"),
+                "case_context": case_context,
+                "macro_context": {
+                    "macro_timeframe": macro_timeframe,
+                    "macro_bias": case_context.get("macro_bias", "") if isinstance(case_context, dict) else "",
+                    "macro_change_pct": case_context.get("macro_change_pct", 0.0) if isinstance(case_context, dict) else 0.0,
+                },
+                "fallback_reason": str(exc),
+            }
         final_result["decision_route"] = decision_route
         final_result["route_reason"] = route_reason
         final_result["ai_review_skipped"] = False

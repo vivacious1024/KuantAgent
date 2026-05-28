@@ -81,6 +81,56 @@ def _extract_json_block(text: str) -> Dict[str, Any]:
         return {}
 
 
+def _apply_llm_overrides(
+    base_config: Dict[str, Any],
+    *,
+    llm_preset: str,
+    agent_llm_model: str,
+    graph_llm_model: str,
+    vision_llm_model: str,
+    qwen_base_url: str,
+    qwen_api_env_name: str,
+) -> Dict[str, Any]:
+    config = dict(base_config)
+    preset = (llm_preset or "default").strip().lower()
+
+    preset_defaults: Dict[str, str] = {}
+    if preset == "siliconflow_qwen":
+        preset_defaults = {
+            "agent_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+            "graph_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+            "vision_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+            "qwen_base_url": "https://api.siliconflow.cn/v1",
+            "qwen_api_env_name": "SILICONFLOW_API_KEY",
+        }
+    elif preset == "mimo":
+        preset_defaults = {
+            "agent_llm_model": "mimo-v2.5-pro",
+            "graph_llm_model": "mimo-v2.5-pro",
+            "vision_llm_model": "mimo-v2.5-pro",
+            "qwen_base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+            "qwen_api_env_name": "MIMO_API_KEY",
+        }
+    elif preset not in {"default", "custom"}:
+        raise ValueError(f"Unsupported llm preset: {llm_preset}")
+
+    for key, value in preset_defaults.items():
+        config[key] = value
+
+    explicit_overrides = {
+        "agent_llm_model": agent_llm_model,
+        "graph_llm_model": graph_llm_model,
+        "vision_llm_model": vision_llm_model,
+        "qwen_base_url": qwen_base_url,
+        "qwen_api_env_name": qwen_api_env_name,
+    }
+    for key, value in explicit_overrides.items():
+        if str(value or "").strip():
+            config[key] = str(value).strip()
+
+    return config
+
+
 def run_full_graph_sample(
     project_root: Path,
     csv_path: Path,
@@ -89,6 +139,12 @@ def run_full_graph_sample(
     window_size: int,
     future_horizon: int,
     neutral_threshold_pct: float,
+    llm_preset: str = "default",
+    agent_llm_model: str = "",
+    graph_llm_model: str = "",
+    vision_llm_model: str = "",
+    qwen_base_url: str = "",
+    qwen_api_env_name: str = "",
 ) -> Dict[str, Any]:
     _log(f"Preparing sample {csv_path.name} for project {project_root.name}")
     if str(project_root) not in sys.path:
@@ -124,7 +180,16 @@ def run_full_graph_sample(
             decision_features={},
         )
     display_timeframe = _display_timeframe(timeframe)
-    use_multimodal_images = bool(DEFAULT_CONFIG.get("use_multimodal_images", True))
+    run_config = _apply_llm_overrides(
+        DEFAULT_CONFIG,
+        llm_preset=llm_preset,
+        agent_llm_model=agent_llm_model,
+        graph_llm_model=graph_llm_model,
+        vision_llm_model=vision_llm_model,
+        qwen_base_url=qwen_base_url,
+        qwen_api_env_name=qwen_api_env_name,
+    )
+    use_multimodal_images = bool(run_config.get("use_multimodal_images", True))
 
     pattern_image = ""
     trend_image = ""
@@ -157,7 +222,7 @@ def run_full_graph_sample(
         )
 
     _log("Initializing TradingGraph")
-    trading_graph = TradingGraph()
+    trading_graph = TradingGraph(config=run_config)
     _log("Invoking LangGraph workflow")
     final_state = trading_graph.graph.invoke(initial_state)
     _log("Graph invocation completed")
@@ -185,9 +250,10 @@ def run_full_graph_sample(
     horizon_correct_count = int(sum(1 for direction in future_step_directions if predicted == direction))
     horizon_total_count = len(future_step_directions)
     horizon_step_accuracy = 0.0 if horizon_total_count == 0 else horizon_correct_count / horizon_total_count
-    correct = int(predicted == true_direction)
+    final_direction_correct = int(predicted == true_direction)
+    horizon_majority_correct = final_direction_correct
     if future_horizon > 1 and horizon_total_count > 0:
-        correct = int(horizon_correct_count >= ((horizon_total_count // 2) + 1))
+        horizon_majority_correct = int(horizon_correct_count >= ((horizon_total_count // 2) + 1))
     confidence = final_decision_json.get("confidence")
     if isinstance(confidence, str):
         try:
@@ -202,7 +268,9 @@ def run_full_graph_sample(
         "future_horizon": future_horizon,
         "predicted": predicted,
         "true_direction": true_direction,
-        "correct": correct,
+        "final_direction_correct": final_direction_correct,
+        "horizon_majority_correct": horizon_majority_correct,
+        "correct": horizon_majority_correct,
         "confidence": confidence,
         "future_return_pct": round(future_return_pct, 4),
         "horizon_correct_count": horizon_correct_count,
@@ -224,6 +292,17 @@ def main() -> None:
     parser.add_argument("--window-size", type=int, default=45)
     parser.add_argument("--future-horizon", type=int, default=3)
     parser.add_argument("--neutral-threshold-pct", type=float, default=0.15)
+    parser.add_argument(
+        "--llm-preset",
+        default="default",
+        choices=["default", "siliconflow_qwen", "mimo", "custom"],
+        help="Predefined full-system LLM endpoint/model preset.",
+    )
+    parser.add_argument("--agent-llm-model", default="", help="Optional override for agent LLM model name.")
+    parser.add_argument("--graph-llm-model", default="", help="Optional override for graph LLM model name.")
+    parser.add_argument("--vision-llm-model", default="", help="Optional override for vision LLM model name.")
+    parser.add_argument("--qwen-base-url", default="", help="Optional override for qwen-compatible base URL.")
+    parser.add_argument("--qwen-api-env-name", default="", help="Optional preferred environment variable for the qwen-compatible API key.")
     args = parser.parse_args()
 
     result = run_full_graph_sample(
@@ -234,6 +313,12 @@ def main() -> None:
         window_size=args.window_size,
         future_horizon=args.future_horizon,
         neutral_threshold_pct=args.neutral_threshold_pct,
+        llm_preset=args.llm_preset,
+        agent_llm_model=args.agent_llm_model,
+        graph_llm_model=args.graph_llm_model,
+        vision_llm_model=args.vision_llm_model,
+        qwen_base_url=args.qwen_base_url,
+        qwen_api_env_name=args.qwen_api_env_name,
     )
     # Emit ASCII-safe JSON so Windows GBK consoles cannot crash on model outputs
     # containing symbols such as superscripts, math characters, or non-ASCII text.

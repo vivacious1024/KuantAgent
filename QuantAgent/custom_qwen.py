@@ -8,27 +8,54 @@ from langchain_openai import ChatOpenAI
 from pydantic import Field
 
 
-class CustomChatQwen(BaseChatModel):
-    """Compatibility wrapper that routes Qwen calls through SiliconFlow."""
+def _read_persistent_windows_env(var_name: str) -> str:
+    try:
+        import winreg  # type: ignore
+    except Exception:
+        return ""
 
-    model_name: str = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
+    registry_paths = [
+        (winreg.HKEY_CURRENT_USER, r"Environment"),
+        (
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+        ),
+    ]
+    for root, subkey in registry_paths:
+        try:
+            with winreg.OpenKey(root, subkey) as key:
+                value, _ = winreg.QueryValueEx(key, var_name)
+                if value:
+                    return str(value)
+        except Exception:
+            continue
+    return ""
+
+
+class CustomChatQwen(BaseChatModel):
+    """Compatibility wrapper that routes Qwen-provider calls through Xiaomi MiMo."""
+
+    model_name: str = "mimo-v2.5-pro"
     dashscope_api_key: Optional[str] = None
     siliconflow_api_key: Optional[str] = None
+    mimo_api_key: Optional[str] = None
     temperature: float = 0.0
     max_retries: int = 2
-    base_url: str = "https://api.siliconflow.cn/v1"
+    base_url: str = "https://token-plan-cn.xiaomimimo.com/v1"
     _delegate: Any = Field(default=None, exclude=True)
 
     def model_post_init(self, __context: Any) -> None:
         api_key = (
-            self.siliconflow_api_key
+            self.mimo_api_key
+            or self.siliconflow_api_key
             or self.dashscope_api_key
+            or os.environ.get("MIMO_API_KEY", "")
+            or _read_persistent_windows_env("MIMO_API_KEY")
             or os.environ.get("SILICONFLOW_API_KEY", "")
+            or _read_persistent_windows_env("SILICONFLOW_API_KEY")
         )
         if not api_key:
-            raise ValueError(
-                "SiliconFlow API key not found. Please set SILICONFLOW_API_KEY."
-            )
+            raise ValueError("MiMo API key not found. Please set MIMO_API_KEY.")
 
         self._delegate = ChatOpenAI(
             model=self.model_name,
@@ -40,7 +67,7 @@ class CustomChatQwen(BaseChatModel):
 
     @property
     def _llm_type(self) -> str:
-        return "custom_qwen_siliconflow"
+        return "custom_qwen_mimo"
 
     def _generate(
         self,

@@ -7,12 +7,37 @@ import os
 from typing import Dict
 
 from langchain_core.language_models import BaseChatModel
-# Qwen provider is routed through SiliconFlow's OpenAI-compatible API.
+# Qwen provider label is kept for compatibility, but routed through SiliconFlow.
 from langgraph.prebuilt import ToolNode
 
 from default_config import DEFAULT_CONFIG
 from graph_setup import SetGraph
 from graph_util import TechnicalTools
+
+
+def _read_persistent_windows_env(var_name: str) -> str:
+    """Read a user/machine environment variable directly from Windows registry."""
+    try:
+        import winreg  # type: ignore
+    except Exception:
+        return ""
+
+    registry_paths = [
+        (winreg.HKEY_CURRENT_USER, r"Environment"),
+        (
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+        ),
+    ]
+    for root, subkey in registry_paths:
+        try:
+            with winreg.OpenKey(root, subkey) as key:
+                value, _ = winreg.QueryValueEx(key, var_name)
+                if value:
+                    return str(value)
+        except Exception:
+            continue
+    return ""
 
 
 class TradingGraph:
@@ -51,6 +76,12 @@ class TradingGraph:
 
         # --- The main LangGraph graph object ---
         self.graph = self.graph_setup.set_graph()
+
+    def _get_qwen_api_env_name(self) -> str:
+        return str(self.config.get("qwen_api_env_name", "") or "").strip()
+
+    def _get_qwen_base_url(self) -> str:
+        return str(self.config.get("qwen_base_url", "") or "").strip() or "https://api.siliconflow.cn/v1"
 
     def _get_api_key(self, provider: str = "openai") -> str:
         """
@@ -109,19 +140,32 @@ class TradingGraph:
                     "You can get one from: https://console.anthropic.com/"
                 )
         elif provider == "qwen":
-            # Route the Qwen provider through SiliconFlow's OpenAI-compatible API.
-            api_key = os.environ.get("SILICONFLOW_API_KEY")
+            # Keep the qwen provider label for compatibility, but route the
+            # actual calls through SiliconFlow.
+            api_key = self.config.get("qwen_api_key")
+            preferred_env = self._get_qwen_api_env_name()
+            if not api_key and preferred_env:
+                api_key = os.environ.get(preferred_env) or _read_persistent_windows_env(preferred_env)
+            if not api_key:
+                api_key = (
+                    self.config.get("siliconflow_api_key")
+                    or os.environ.get("SILICONFLOW_API_KEY")
+                    or _read_persistent_windows_env("SILICONFLOW_API_KEY")
+                    or self.config.get("mimo_api_key")
+                    or os.environ.get("MIMO_API_KEY")
+                    or _read_persistent_windows_env("MIMO_API_KEY")
+                )
             
             if not api_key:
                 raise ValueError(
-                    "Qwen API key not found. Please set environment variable "
+                    "SiliconFlow API key not found. Please set environment variable "
                     "'SILICONFLOW_API_KEY' before starting the app."
                 )
             
             if api_key == "":
                 raise ValueError(
                     "Please provide your actual SiliconFlow API key. "
-                    "You can get one from: https://siliconflow.cn/"
+                    "You can get one from: https://api.siliconflow.cn/"
                 )
         else:
             raise ValueError(f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', or 'qwen'")
@@ -170,7 +214,7 @@ class TradingGraph:
                 model=model,
                 temperature=temperature,
                 api_key=api_key,
-                base_url="https://api.siliconflow.cn/v1",
+                base_url=self._get_qwen_base_url(),
                 max_retries=4,
             )
         else:
@@ -248,9 +292,13 @@ class TradingGraph:
             # Also update the environment variable for consistency
             os.environ["ANTHROPIC_API_KEY"] = api_key
         elif provider == "qwen":
-            # Keep config empty and use the environment variable as the source of truth.
-            self.config["qwen_api_key"] = ""
-            os.environ["SILICONFLOW_API_KEY"] = api_key
+            self.config["qwen_api_key"] = api_key
+            preferred_env = self._get_qwen_api_env_name() or "SILICONFLOW_API_KEY"
+            os.environ[preferred_env] = api_key
+            if preferred_env == "SILICONFLOW_API_KEY":
+                self.config["siliconflow_api_key"] = api_key
+            if preferred_env == "MIMO_API_KEY":
+                self.config["mimo_api_key"] = api_key
         else:
             raise ValueError(f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', or 'qwen'")
         

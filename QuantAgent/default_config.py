@@ -1,7 +1,7 @@
 DEFAULT_CONFIG = {
-    "agent_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
-    "graph_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
-    "vision_llm_model": "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+    "agent_llm_model": "mimo-v2.5-pro",
+    "graph_llm_model": "mimo-v2.5-pro",
+    "vision_llm_model": "mimo-v2.5-pro",
     "agent_llm_provider": "qwen",
     "graph_llm_provider": "qwen",
     "vision_llm_provider": "qwen",
@@ -11,5 +11,9 @@ DEFAULT_CONFIG = {
     "api_key": "",
     "anthropic_api_key": "",
     "qwen_api_key": "",
+    "mimo_api_key": "",
+    "siliconflow_api_key": "",
+    "qwen_base_url": "",
+    "qwen_api_env_name": "",
     "use_multimodal_images": True,
 }

@@ -50,6 +50,12 @@ class BenchmarkRunnerGUI:
         self.run_kuant_var = tk.BooleanVar(value=True)
         self.run_quant_var = tk.BooleanVar(value=True)
         self.auto_plot_var = tk.BooleanVar(value=True)
+        self.llm_preset_var = tk.StringVar(value="default")
+        self.agent_model_var = tk.StringVar(value="")
+        self.graph_model_var = tk.StringVar(value="")
+        self.vision_model_var = tk.StringVar(value="")
+        self.base_url_var = tk.StringVar(value="")
+        self.api_env_var = tk.StringVar(value="")
 
         self.status_var = tk.StringVar(value="Ready")
         self.phase_var = tk.StringVar(value="Idle")
@@ -61,6 +67,7 @@ class BenchmarkRunnerGUI:
         self.system_progress_var = tk.StringVar(value="No system running")
 
         self._build_ui()
+        self.llm_preset_var.trace_add("write", self._handle_preset_change)
         self._refresh_command_preview()
         self.root.after(120, self._poll_log_queue)
 
@@ -87,15 +94,16 @@ class BenchmarkRunnerGUI:
         self._add_labeled_entry(left, 7, "End Sample Index (optional)", self.end_index_var)
         self._add_labeled_entry(left, 8, "Sample Count", self.limit_var)
         self._add_labeled_entry(left, 9, "Per-System Timeout (sec)", self.timeout_var)
+        self._add_llm_controls(left, 10)
 
         checks = ttk.Frame(left)
-        checks.grid(row=10, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        checks.grid(row=16, column=0, columnspan=3, sticky="w", pady=(8, 0))
         ttk.Checkbutton(checks, text="Run KuantAgent", variable=self.run_kuant_var, command=self._refresh_command_preview).pack(side=tk.LEFT)
         ttk.Checkbutton(checks, text="Run QuantAgent", variable=self.run_quant_var, command=self._refresh_command_preview).pack(side=tk.LEFT, padx=(12, 0))
         ttk.Checkbutton(checks, text="Auto Plot After Run", variable=self.auto_plot_var).pack(side=tk.LEFT, padx=(12, 0))
 
         button_row = ttk.Frame(left)
-        button_row.grid(row=11, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        button_row.grid(row=17, column=0, columnspan=3, sticky="w", pady=(10, 0))
         self.start_button = ttk.Button(button_row, text="Start Run", command=self.start_run)
         self.start_button.pack(side=tk.LEFT)
         self.stop_button = ttk.Button(button_row, text="Stop Run", command=self.stop_run, state=tk.DISABLED)
@@ -160,6 +168,46 @@ class BenchmarkRunnerGUI:
             ttk.Button(parent, text="Browse", command=lambda: self._browse_dir(variable)).grid(row=row, column=2, padx=(8, 0))
         parent.columnconfigure(1, weight=1)
 
+    def _add_llm_controls(self, parent: ttk.LabelFrame, start_row: int) -> None:
+        ttk.Label(parent, text="LLM Preset").grid(row=start_row, column=0, sticky="w", pady=4)
+        preset_box = ttk.Combobox(
+            parent,
+            textvariable=self.llm_preset_var,
+            values=("default", "siliconflow_qwen", "mimo", "custom"),
+            state="readonly",
+            width=30,
+        )
+        preset_box.grid(row=start_row, column=1, sticky="w", pady=4, padx=(8, 0))
+        preset_box.bind("<<ComboboxSelected>>", lambda _event: self._refresh_command_preview())
+
+        self._add_labeled_entry(parent, start_row + 1, "Agent LLM Model (optional)", self.agent_model_var)
+        self._add_labeled_entry(parent, start_row + 2, "Graph LLM Model (optional)", self.graph_model_var)
+        self._add_labeled_entry(parent, start_row + 3, "Vision LLM Model (optional)", self.vision_model_var)
+        self._add_labeled_entry(parent, start_row + 4, "Qwen-Compatible Base URL", self.base_url_var)
+        self._add_labeled_entry(parent, start_row + 5, "API Key Env Name", self.api_env_var)
+
+    def _handle_preset_change(self, *_args: object) -> None:
+        preset = self.llm_preset_var.get().strip().lower()
+        if preset == "siliconflow_qwen":
+            self.agent_model_var.set("Qwen/Qwen3-Omni-30B-A3B-Thinking")
+            self.graph_model_var.set("Qwen/Qwen3-Omni-30B-A3B-Thinking")
+            self.vision_model_var.set("Qwen/Qwen3-Omni-30B-A3B-Thinking")
+            self.base_url_var.set("https://api.siliconflow.cn/v1")
+            self.api_env_var.set("SILICONFLOW_API_KEY")
+        elif preset == "mimo":
+            self.agent_model_var.set("mimo-v2.5-pro")
+            self.graph_model_var.set("mimo-v2.5-pro")
+            self.vision_model_var.set("mimo-v2.5-pro")
+            self.base_url_var.set("https://token-plan-cn.xiaomimimo.com/v1")
+            self.api_env_var.set("MIMO_API_KEY")
+        elif preset == "default":
+            self.agent_model_var.set("")
+            self.graph_model_var.set("")
+            self.vision_model_var.set("")
+            self.base_url_var.set("")
+            self.api_env_var.set("")
+        self._refresh_command_preview()
+
     def _browse_file(self, variable: tk.StringVar) -> None:
         path = filedialog.askopenfilename(initialdir=str(Path(variable.get()).parent if variable.get() else ROOT_DIR))
         if path:
@@ -192,10 +240,22 @@ class BenchmarkRunnerGUI:
             self.limit_var.get().strip(),
             "--system-timeout-sec",
             self.timeout_var.get().strip(),
+            "--llm-preset",
+            self.llm_preset_var.get().strip() or "default",
         ]
         end_index = self.end_index_var.get().strip()
         if end_index:
             command.extend(["--end-index", end_index])
+        if self.agent_model_var.get().strip():
+            command.extend(["--agent-llm-model", self.agent_model_var.get().strip()])
+        if self.graph_model_var.get().strip():
+            command.extend(["--graph-llm-model", self.graph_model_var.get().strip()])
+        if self.vision_model_var.get().strip():
+            command.extend(["--vision-llm-model", self.vision_model_var.get().strip()])
+        if self.base_url_var.get().strip():
+            command.extend(["--qwen-base-url", self.base_url_var.get().strip()])
+        if self.api_env_var.get().strip():
+            command.extend(["--qwen-api-env-name", self.api_env_var.get().strip()])
         if self.run_kuant_var.get():
             command.append("--run-kuant-full")
         if self.run_quant_var.get():

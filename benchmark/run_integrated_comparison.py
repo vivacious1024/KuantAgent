@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -68,6 +69,12 @@ def _run_full_system_subprocess(
     future_horizon: int,
     neutral_threshold_pct: float,
     timeout_sec: int,
+    llm_preset: str,
+    agent_llm_model: str,
+    graph_llm_model: str,
+    vision_llm_model: str,
+    qwen_base_url: str,
+    qwen_api_env_name: str,
 ) -> Dict[str, Any]:
     command = [
         sys.executable,
@@ -86,7 +93,19 @@ def _run_full_system_subprocess(
         str(future_horizon),
         "--neutral-threshold-pct",
         str(neutral_threshold_pct),
+        "--llm-preset",
+        llm_preset,
     ]
+    if agent_llm_model:
+        command.extend(["--agent-llm-model", agent_llm_model])
+    if graph_llm_model:
+        command.extend(["--graph-llm-model", graph_llm_model])
+    if vision_llm_model:
+        command.extend(["--vision-llm-model", vision_llm_model])
+    if qwen_base_url:
+        command.extend(["--qwen-base-url", qwen_base_url])
+    if qwen_api_env_name:
+        command.extend(["--qwen-api-env-name", qwen_api_env_name])
     command_text = subprocess.list2cmdline(command)
     print(
         f"[runner] Launching {project_root.name} helper script for {csv_path.name}",
@@ -165,13 +184,17 @@ def _to_eval_record(result: Dict[str, Any]) -> Dict[str, Any]:
     execution_advice = str(parsed_decision.get("execution_advice", "")).lower()
     hard_case_score = float(parsed_decision.get("hard_case_score", 0.0) or 0.0)
     is_neutral_prediction = int(predicted == "NEUTRAL" or execution_advice == "skip")
+    final_direction_correct = int(result.get("final_direction_correct", int(predicted == str(result["true_direction"]).upper())) or 0)
+    horizon_majority_correct = int(result.get("horizon_majority_correct", result.get("correct", final_direction_correct)) or 0)
     return {
         "asset": result["asset"],
         "timeframe": result["timeframe"],
         "sample_file": result["sample_file"],
         "predicted": predicted,
         "true_direction": result["true_direction"],
-        "correct": int(result["correct"]),
+        "final_direction_correct": final_direction_correct,
+        "horizon_majority_correct": horizon_majority_correct,
+        "correct": horizon_majority_correct,
         "confidence": float(result["confidence"] or 0.0),
         "future_return_pct": float(result["future_return_pct"]),
         "horizon_correct_count": int(result.get("horizon_correct_count", int(result["correct"])) or 0),
@@ -215,6 +238,8 @@ def _failure_eval_record(
         "sample_file": sample_file,
         "predicted": "NEUTRAL",
         "true_direction": true_direction,
+        "final_direction_correct": 0,
+        "horizon_majority_correct": 0,
         "correct": 0,
         "confidence": 0.0,
         "future_return_pct": future_return_pct,
@@ -245,23 +270,30 @@ def _summarize_system(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             "accuracy_report": {
                 "num_samples": 0,
                 "accuracy": None,
+                "final_direction_accuracy": None,
+                "horizon_majority_accuracy": None,
                 "avg_confidence": None,
                 "num_neutral_predictions": 0,
                 "actionable_num_samples": 0,
                 "actionable_coverage": 0.0,
                 "actionable_accuracy": None,
+                "final_direction_actionable_accuracy": None,
                 "num_neutral_moves": 0,
                 "filtered_num_samples": 0,
                 "filtered_accuracy_ex_neutral": None,
+                "final_direction_filtered_accuracy_ex_neutral": None,
                 "filtered_actionable_num_samples": 0,
                 "filtered_actionable_accuracy": None,
+                "final_direction_filtered_actionable_accuracy": None,
                 "asset_accuracy": {},
+                "asset_final_direction_accuracy": {},
                 "details": [],
             }
         }
 
     df = pd.DataFrame(records)
-    accuracy = round(float(df["correct"].mean()), 4)
+    final_direction_accuracy = round(float(df["final_direction_correct"].mean()), 4)
+    horizon_majority_accuracy = round(float(df["horizon_majority_correct"].mean()), 4)
     horizon_total = int(df["horizon_total_count"].sum()) if "horizon_total_count" in df.columns else int(len(df))
     horizon_correct = int(df["horizon_correct_count"].sum()) if "horizon_correct_count" in df.columns else int(df["correct"].sum())
     horizon_step_accuracy = None if horizon_total == 0 else round(float(horizon_correct / horizon_total), 4)
@@ -273,12 +305,15 @@ def _summarize_system(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     hard_case_actionable_df = hard_case_df[hard_case_df["is_neutral_prediction"] == 0]
     successful_df = df[df["is_system_failure"] == 0]
 
-    asset_accuracy = df.groupby("asset")["correct"].mean().round(4).to_dict()
+    asset_accuracy = df.groupby("asset")["horizon_majority_correct"].mean().round(4).to_dict()
+    asset_final_direction_accuracy = df.groupby("asset")["final_direction_correct"].mean().round(4).to_dict()
 
     return {
         "accuracy_report": {
             "num_samples": int(len(df)),
-            "accuracy": accuracy,
+            "accuracy": horizon_majority_accuracy,
+            "final_direction_accuracy": final_direction_accuracy,
+            "horizon_majority_accuracy": horizon_majority_accuracy,
             "horizon_step_accuracy": horizon_step_accuracy,
             "horizon_correct_count": horizon_correct,
             "horizon_total_count": horizon_total,
@@ -286,26 +321,46 @@ def _summarize_system(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             "num_neutral_predictions": int(df["is_neutral_prediction"].sum()),
             "actionable_num_samples": int(len(actionable_df)),
             "actionable_coverage": round(float(len(actionable_df) / len(df)), 4),
-            "actionable_accuracy": None if actionable_df.empty else round(float(actionable_df["correct"].mean()), 4),
+            "actionable_accuracy": None if actionable_df.empty else round(float(actionable_df["horizon_majority_correct"].mean()), 4),
+            "final_direction_actionable_accuracy": None
+            if actionable_df.empty
+            else round(float(actionable_df["final_direction_correct"].mean()), 4),
             "num_neutral_moves": int(df["is_neutral_move"].sum()),
             "filtered_num_samples": int(len(strong_move_df)),
-            "filtered_accuracy_ex_neutral": None if strong_move_df.empty else round(float(strong_move_df["correct"].mean()), 4),
+            "filtered_accuracy_ex_neutral": None
+            if strong_move_df.empty
+            else round(float(strong_move_df["horizon_majority_correct"].mean()), 4),
+            "final_direction_filtered_accuracy_ex_neutral": None
+            if strong_move_df.empty
+            else round(float(strong_move_df["final_direction_correct"].mean()), 4),
             "filtered_actionable_num_samples": int(len(strong_move_actionable_df)),
             "filtered_actionable_accuracy": None
             if strong_move_actionable_df.empty
-            else round(float(strong_move_actionable_df["correct"].mean()), 4),
+            else round(float(strong_move_actionable_df["horizon_majority_correct"].mean()), 4),
+            "final_direction_filtered_actionable_accuracy": None
+            if strong_move_actionable_df.empty
+            else round(float(strong_move_actionable_df["final_direction_correct"].mean()), 4),
             "hard_case_num_samples": int(len(hard_case_df)),
-            "hard_case_accuracy": None if hard_case_df.empty else round(float(hard_case_df["correct"].mean()), 4),
+            "hard_case_accuracy": None
+            if hard_case_df.empty
+            else round(float(hard_case_df["horizon_majority_correct"].mean()), 4),
+            "final_direction_hard_case_accuracy": None
+            if hard_case_df.empty
+            else round(float(hard_case_df["final_direction_correct"].mean()), 4),
             "hard_case_actionable_num_samples": int(len(hard_case_actionable_df)),
             "hard_case_actionable_accuracy": None
             if hard_case_actionable_df.empty
-            else round(float(hard_case_actionable_df["correct"].mean()), 4),
+            else round(float(hard_case_actionable_df["horizon_majority_correct"].mean()), 4),
+            "final_direction_hard_case_actionable_accuracy": None
+            if hard_case_actionable_df.empty
+            else round(float(hard_case_actionable_df["final_direction_correct"].mean()), 4),
             "algorithm_only_num_samples": int((df["decision_route"] == "algorithm_only").sum()),
             "algorithm_only_coverage": round(float((df["decision_route"] == "algorithm_only").mean()), 4),
             "system_failure_count": int(df["is_system_failure"].sum()),
             "successful_num_samples": int(len(successful_df)),
             "successful_coverage": round(float(len(successful_df) / len(df)), 4),
             "asset_accuracy": asset_accuracy,
+            "asset_final_direction_accuracy": asset_final_direction_accuracy,
             "details": df.to_dict(orient="records"),
         }
     }
@@ -375,14 +430,19 @@ def _build_report(
             return
         report = summary["accuracy_report"]
         lines.append(f"- Num samples: `{report['num_samples']}`")
-        lines.append(f"- Accuracy: `{report['accuracy']}`")
+        lines.append(f"- Final direction accuracy: `{report.get('final_direction_accuracy')}`")
+        lines.append(f"- Horizon majority accuracy: `{report.get('horizon_majority_accuracy', report['accuracy'])}`")
         lines.append(f"- Horizon step accuracy: `{report.get('horizon_step_accuracy')}`")
         lines.append(f"- Avg confidence: `{report['avg_confidence']}`")
-        lines.append(f"- Actionable accuracy: `{report['actionable_accuracy']}`")
+        lines.append(f"- Final direction actionable accuracy: `{report.get('final_direction_actionable_accuracy')}`")
+        lines.append(f"- Horizon majority actionable accuracy: `{report['actionable_accuracy']}`")
         lines.append(f"- Actionable coverage: `{report['actionable_coverage']}`")
-        lines.append(f"- Filtered accuracy ex neutral: `{report['filtered_accuracy_ex_neutral']}`")
-        lines.append(f"- Hard-case accuracy: `{report['hard_case_accuracy']}`")
-        lines.append(f"- Hard-case actionable accuracy: `{report['hard_case_actionable_accuracy']}`")
+        lines.append(f"- Final direction filtered accuracy ex neutral: `{report.get('final_direction_filtered_accuracy_ex_neutral')}`")
+        lines.append(f"- Horizon majority filtered accuracy ex neutral: `{report['filtered_accuracy_ex_neutral']}`")
+        lines.append(f"- Final direction hard-case accuracy: `{report.get('final_direction_hard_case_accuracy')}`")
+        lines.append(f"- Horizon majority hard-case accuracy: `{report['hard_case_accuracy']}`")
+        lines.append(f"- Final direction hard-case actionable accuracy: `{report.get('final_direction_hard_case_actionable_accuracy')}`")
+        lines.append(f"- Horizon majority hard-case actionable accuracy: `{report['hard_case_actionable_accuracy']}`")
         lines.append(f"- Algorithm-only coverage: `{report['algorithm_only_coverage']}`")
         lines.append(f"- System failure count: `{report['system_failure_count']}`")
         lines.append(f"- Successful coverage: `{report['successful_coverage']}`")
@@ -393,19 +453,21 @@ def _build_report(
     add_system_block("QuantAgent Original System", quant_summary)
 
     if kuant_summary is not None:
-        pure_acc = pure_summary["accuracy_report"]["accuracy"]
-        kuant_acc = kuant_summary["accuracy_report"]["accuracy"]
+        pure_acc = pure_summary["accuracy_report"].get("final_direction_accuracy")
+        kuant_acc = kuant_summary["accuracy_report"].get("final_direction_accuracy")
         lines.append("## KuantAgent vs Pure Algorithm")
-        lines.append(f"- Accuracy delta: `{round(kuant_acc - pure_acc, 4)}`")
+        if pure_acc is not None and kuant_acc is not None:
+            lines.append(f"- Final direction accuracy delta: `{round(kuant_acc - pure_acc, 4)}`")
         if kuant_summary["accuracy_report"]["system_failure_count"] > 0:
             lines.append("- Fairness note: KuantAgent had system failures in this run, so direct comparison is not valid yet.")
         lines.append("")
 
     if kuant_summary is not None and quant_summary is not None:
-        kuant_acc = kuant_summary["accuracy_report"]["accuracy"]
-        quant_acc = quant_summary["accuracy_report"]["accuracy"]
+        kuant_acc = kuant_summary["accuracy_report"].get("final_direction_accuracy")
+        quant_acc = quant_summary["accuracy_report"].get("final_direction_accuracy")
         lines.append("## KuantAgent vs QuantAgent")
-        lines.append(f"- Accuracy delta: `{round(kuant_acc - quant_acc, 4)}`")
+        if kuant_acc is not None and quant_acc is not None:
+            lines.append(f"- Final direction accuracy delta: `{round(kuant_acc - quant_acc, 4)}`")
         if (
             kuant_summary["accuracy_report"]["system_failure_count"] > 0
             or quant_summary["accuracy_report"]["system_failure_count"] > 0
@@ -444,6 +506,17 @@ def main() -> None:
         default=1800,
         help="Timeout in seconds for each full-system sample subprocess.",
     )
+    parser.add_argument(
+        "--llm-preset",
+        default="default",
+        choices=["default", "siliconflow_qwen", "mimo", "custom"],
+        help="Predefined full-system LLM endpoint/model preset.",
+    )
+    parser.add_argument("--agent-llm-model", default="", help="Optional override for agent LLM model name.")
+    parser.add_argument("--graph-llm-model", default="", help="Optional override for graph LLM model name.")
+    parser.add_argument("--vision-llm-model", default="", help="Optional override for vision LLM model name.")
+    parser.add_argument("--qwen-base-url", default="", help="Optional override for qwen-compatible base URL.")
+    parser.add_argument("--qwen-api-env-name", default="", help="Optional preferred environment variable for the qwen-compatible API key.")
     args = parser.parse_args()
 
     benchmark_dir = Path(args.benchmark_dir).resolve()
@@ -471,8 +544,9 @@ def main() -> None:
     quant_root = root_dir / "QuantAgent"
     helper_script = Path(__file__).resolve().parent / "run_full_graph_sample.py"
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(__file__).resolve().parent / "results" / f"integrated_comparison_{args.timeframe}_{timestamp}"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    run_suffix = f"{timestamp}_{os.getpid()}"
+    output_dir = Path(__file__).resolve().parent / "results" / f"integrated_comparison_{args.timeframe}_{run_suffix}"
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"[runner] Output directory: {output_dir}", file=sys.stderr, flush=True)
     (output_dir / "run_config.json").write_text(
@@ -522,6 +596,12 @@ def main() -> None:
                         future_horizon=args.future_horizon,
                         neutral_threshold_pct=args.neutral_threshold_pct,
                         timeout_sec=args.system_timeout_sec,
+                        llm_preset=args.llm_preset,
+                        agent_llm_model=args.agent_llm_model,
+                        graph_llm_model=args.graph_llm_model,
+                        vision_llm_model=args.vision_llm_model,
+                        qwen_base_url=args.qwen_base_url,
+                        qwen_api_env_name=args.qwen_api_env_name,
                     )
                     kuant_results.append(_to_eval_record(kuant_raw))
                 except Exception as exc:
@@ -566,6 +646,12 @@ def main() -> None:
                         future_horizon=args.future_horizon,
                         neutral_threshold_pct=args.neutral_threshold_pct,
                         timeout_sec=args.system_timeout_sec,
+                        llm_preset=args.llm_preset,
+                        agent_llm_model=args.agent_llm_model,
+                        graph_llm_model=args.graph_llm_model,
+                        vision_llm_model=args.vision_llm_model,
+                        qwen_base_url=args.qwen_base_url,
+                        qwen_api_env_name=args.qwen_api_env_name,
                     )
                     quant_results.append(_to_eval_record(quant_raw))
                 except Exception as exc:

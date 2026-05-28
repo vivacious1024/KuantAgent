@@ -1791,9 +1791,11 @@ def _derive_structure_semantics(
     pattern_geometry_score = float(pattern_features.get("pattern_geometry_score", 0.0) or 0.0)
     breakout_confirmed = bool(pattern_features.get("breakout_confirmed", False))
     breakout_authenticity_score = float(pattern_features.get("breakout_authenticity_score", 0.0) or 0.0)
+    breakout_body_ratio = float(pattern_features.get("breakout_body_ratio", 0.0) or 0.0)
     breakout_retest_quality = str(pattern_features.get("breakout_retest_quality", "unknown"))
     market_regime = str(trend_features.get("market_regime", "range"))
     trend_direction = str(trend_features.get("trend_direction", "sideways"))
+    trend_alignment_state = str(trend_features.get("trend_alignment_state", "mixed_transition"))
     breakout_state = str(trend_features.get("breakout_state", "inside_range"))
     channel_direction = str(trend_features.get("channel_direction", "mixed"))
     swing_bias = str(trend_features.get("swing_bias", "mixed"))
@@ -1836,6 +1838,7 @@ def _derive_structure_semantics(
     double_top_score = _candidate_score("double_top")
     hidden_base_score = _candidate_score("hidden_base_breakout")
     hidden_distribution_score = _candidate_score("hidden_distribution_breakdown")
+    symmetrical_triangle_score = _candidate_score("symmetrical_triangle")
     bullish_flag_score = _candidate_score("bullish_flag")
     bearish_flag_score = _candidate_score("bearish_flag")
     v_reversal_score = _candidate_score("v_shaped_reversal")
@@ -1907,6 +1910,35 @@ def _derive_structure_semantics(
         semantic_score = 0.66 + 0.16 * max(hidden_distribution_score, breakout_authenticity_score)
         reasons.append("A candidate hidden distribution breakdown is already confirmed and should be treated as a real bearish release")
     elif (
+        symmetrical_triangle_score >= 0.7
+        and trend_alignment_state == "bullish_short_vs_bearish_long"
+        and breakout_authenticity_score >= 0.16
+        and breakout_body_ratio >= 0.3
+        and latest_close_near_high_ratio >= 0.56
+        and rejection_wick_bias != "bearish"
+        and recent_consecutive_up_closes >= 1
+        and (
+            structure_break_state == "bullish_break"
+            or breakout_state == "bullish_breakout"
+            or recent_breakout_followthrough_score >= 0.12
+        )
+        and (
+            macd_cross == "bullish_cross"
+            or macd_hist >= -0.02
+            or rsi_divergence == "bullish_divergence"
+        )
+    ):
+        semantic_label = "bullish_structure_break"
+        semantic_bias = "LONG"
+        semantic_score = (
+            0.58
+            + 0.1 * min(1.0, symmetrical_triangle_score)
+            + 0.08 * min(1.0, breakout_authenticity_score)
+            + 0.06 * min(1.0, latest_close_near_high_ratio)
+        )
+        reasons.append("Compressed triangle structure is breaking upward against a stale bearish backdrop")
+        reasons.append("Bullish candle quality and short-vs-long structure shift both support upside regime handoff")
+    elif (
         trend_features.get("trend_alignment_state") == "bullish_short_vs_bearish_long"
         and structure_break_state == "bullish_break"
         and latest_close_near_high_ratio >= 0.56
@@ -1936,6 +1968,74 @@ def _derive_structure_semantics(
         semantic_bias = "SHORT"
         semantic_score = 0.6 + 0.12 * swing_quality_score + 0.08 * min(1.0, latest_close_near_low_ratio)
         reasons.append("Short-term downside structure has already broken lower against the stale bullish backdrop")
+    elif (
+        resistance_rejection_score >= 0.66
+        and location_state == "near_resistance"
+        and latest_close_near_low_ratio >= 0.54
+        and breakout_body_ratio >= 0.32
+        and rejection_wick_bias == "bearish"
+        and (
+            recent_consecutive_down_closes >= 1
+            or breakout_state == "testing_resistance"
+            or recent_breakout_failure_score >= 0.16
+        )
+        and (
+            macd_cross == "bearish_cross"
+            or rsi_divergence == "bearish_divergence"
+            or rsi_state in {"overbought", "bearish"}
+            or stoch_state in {"overbought", "bearish"}
+        )
+        and trend_alignment_state in {"aligned_bullish", "bearish_short_vs_bullish_long", "mixed_transition"}
+    ):
+        semantic_label = "resistance_failure_rotation"
+        semantic_bias = "SHORT"
+        semantic_score = (
+            0.56
+            + 0.08 * min(1.0, resistance_rejection_score)
+            + 0.06 * min(1.0, latest_close_near_low_ratio)
+            + 0.05 * min(1.0, breakout_body_ratio)
+        )
+        reasons.append("Price was rejected at resistance with a bearish close near the low of the bar")
+        reasons.append("This looks more like failed upside continuation and short-term downside rotation than a clean bullish breakout")
+    elif (
+        double_bottom_score >= 0.74
+        and breakout_authenticity_score >= 0.3
+        and breakout_body_ratio >= 0.6
+        and latest_close_near_high_ratio >= 0.58
+        and rejection_wick_bias != "bearish"
+        and (
+            recent_consecutive_up_closes >= 1
+            or breakout_state == "bullish_breakout"
+            or recent_breakout_followthrough_score >= 0.16
+        )
+        and location_state != "near_resistance"
+        and (
+            level_reclaim_state == "bullish_reclaim"
+            or structure_break_state == "bullish_break"
+            or trend_alignment_state in {"aligned_bullish", "bullish_short_vs_bearish_long"}
+            or macd_cross == "bullish_cross"
+            or macd_hist >= 0
+        )
+        and not (
+            double_top_score >= double_bottom_score - 0.02
+            and (
+                rsi_divergence == "bearish_divergence"
+                or macd_cross == "bearish_cross"
+                or rsi_state in {"overbought", "bearish"}
+                or stoch_state in {"overbought", "bearish"}
+            )
+        )
+    ):
+        semantic_label = "support_reclaim_rotation"
+        semantic_bias = "LONG"
+        semantic_score = (
+            0.58
+            + 0.1 * min(1.0, double_bottom_score)
+            + 0.08 * min(1.0, breakout_authenticity_score)
+            + 0.05 * min(1.0, breakout_body_ratio)
+        )
+        reasons.append("Bottoming base is not just forming; it is already reclaiming upward with a breakout-style candle")
+        reasons.append("Support reclaim structure plus candle quality favors bullish rotation over stale downside inertia")
     elif (
         double_bottom_score >= 0.84
         and breakout_authenticity_score >= 0.32
@@ -2247,6 +2347,54 @@ def _derive_structure_semantics(
         semantic_score = 0.6 + 0.14 * recent_breakout_failure_score
         reasons.append("Price rejected the downside breakdown and reclaimed the prior structure")
     elif (
+        pattern_name == "double_bottom"
+        and breakout_confirmed
+        and (
+            breakout_authenticity_score >= 0.14
+            or recent_breakout_followthrough_score >= 0.16
+            or latest_close_near_high_ratio >= 0.66
+        )
+        and (
+            latest_close_near_high_ratio >= 0.56
+            or last_candle_body_ratio >= 0.28
+            or level_reclaim_state in {"bullish_reclaim", "failed_bearish_breakdown_reentry"}
+        )
+    ):
+        semantic_label = "hidden_base_release"
+        semantic_bias = "LONG"
+        semantic_score = (
+            0.56
+            + 0.12 * min(1.0, breakout_authenticity_score * 2.0)
+            + 0.08 * min(1.0, recent_breakout_followthrough_score * 2.4)
+            + 0.05 * min(1.0, latest_close_near_high_ratio)
+        )
+        reasons.append("Confirmed double-bottom breakout is treated as a real bullish base release rather than a neutral setup")
+        reasons.append("Strong close behavior and follow-through make this closer to the image-driven bullish release cases")
+    elif (
+        pattern_name == "double_top"
+        and breakout_confirmed
+        and (
+            breakout_authenticity_score >= 0.14
+            or recent_breakout_followthrough_score >= 0.16
+            or latest_close_near_low_ratio >= 0.66
+        )
+        and (
+            latest_close_near_low_ratio >= 0.56
+            or last_candle_body_ratio >= 0.28
+            or level_reclaim_state in {"bearish_reclaim", "failed_bullish_breakout_reentry"}
+        )
+    ):
+        semantic_label = "hidden_distribution_release"
+        semantic_bias = "SHORT"
+        semantic_score = (
+            0.56
+            + 0.12 * min(1.0, breakout_authenticity_score * 2.0)
+            + 0.08 * min(1.0, recent_breakout_followthrough_score * 2.4)
+            + 0.05 * min(1.0, latest_close_near_low_ratio)
+        )
+        reasons.append("Confirmed double-top breakdown is treated as a real bearish distribution release rather than a neutral setup")
+        reasons.append("Strong close failure and follow-through make this closer to the image-driven bearish release cases")
+    elif (
         location_state == "near_support"
         and pattern_name == "support_bounce"
         and recent_breakout_followthrough_score < 0.22
@@ -2321,6 +2469,16 @@ def _classify_trend_exhaustion_risk(
     if direction == "downtrend" and location_state == "near_support" and breakout_state != "bearish_breakdown":
         return "high"
     if direction in {"uptrend", "downtrend"} and breakout_state in {"testing_resistance", "testing_support"}:
+        return "medium"
+    return "low"
+
+
+def _classify_quality_band(score: float, high_threshold: float, medium_threshold: float) -> str:
+    """Map a 0-1 quality score into stable semantic bands for downstream arbitration."""
+
+    if score >= high_threshold:
+        return "high"
+    if score >= medium_threshold:
         return "medium"
     return "low"
 
@@ -2616,6 +2774,151 @@ def extract_decision_features(
     structure_semantic_reasons = list(
         structure_semantics.get("structure_semantic_reasons", [])
     )
+    confirmed_bullish_candidates = [
+        item
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and bool(item.get("breakout_confirmed", False))
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.72
+    ]
+    confirmed_bearish_candidates = [
+        item
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        and bool(item.get("breakout_confirmed", False))
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.72
+    ]
+    bullish_candidate_hints = [
+        item
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.78
+    ]
+    bearish_candidate_hints = [
+        item
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.78
+    ]
+    broad_bullish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    broad_bearish_candidate_count = sum(
+        1
+        for item in candidate_pattern_summaries
+        if isinstance(item, dict)
+        and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.62
+    )
+    bullish_candidate_hint_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_bottom", "hidden_base_breakout", "v_shaped_reversal"}
+        ),
+        default=0.0,
+    )
+    bearish_candidate_hint_top_conf = max(
+        (
+            float(item.get("confidence", 0.0) or 0.0)
+            for item in candidate_pattern_summaries
+            if isinstance(item, dict)
+            and item.get("pattern") in {"double_top", "hidden_distribution_breakdown", "inverted_v_reversal"}
+        ),
+        default=0.0,
+    )
+    ambiguous_high_conf_candidate_conflict = (
+        bullish_candidate_hint_top_conf >= 0.7
+        and bearish_candidate_hint_top_conf >= 0.7
+        and abs(bullish_candidate_hint_top_conf - bearish_candidate_hint_top_conf) <= 0.12
+    )
+    if (
+        structure_semantic_label == "neutral_structure"
+        and three_bar_majority_bias == "LONG"
+        and (
+            confirmed_bullish_candidates
+            or (breakout_confirmed and pattern_name == "double_bottom" and breakout_authenticity_score >= 0.14)
+        )
+        and breakout_body_ratio >= 0.28
+    ):
+        structure_semantic_label = "hidden_base_release"
+        structure_semantic_bias = "LONG"
+        structure_semantic_score = max(
+            structure_semantic_score,
+            0.62 + min(0.16, breakout_authenticity_score * 0.22 + three_bar_path_score * 0.04),
+        )
+        structure_semantic_reasons = [
+            "Confirmed bullish candidate structure is upgraded from neutral to bullish base release",
+            "Three-bar path and candle quality support the same upside handoff",
+        ]
+    elif (
+        structure_semantic_label == "neutral_structure"
+        and three_bar_majority_bias == "SHORT"
+        and (
+            confirmed_bearish_candidates
+            or (breakout_confirmed and pattern_name == "double_top" and breakout_authenticity_score >= 0.14)
+        )
+        and breakout_body_ratio >= 0.28
+    ):
+        structure_semantic_label = "hidden_distribution_release"
+        structure_semantic_bias = "SHORT"
+        structure_semantic_score = max(
+            structure_semantic_score,
+            0.62 + min(0.16, breakout_authenticity_score * 0.22 + three_bar_path_score * 0.04),
+        )
+        structure_semantic_reasons = [
+            "Confirmed bearish candidate structure is upgraded from neutral to bearish distribution release",
+            "Three-bar path and candle quality support the same downside handoff",
+        ]
+    if (
+        structure_semantic_label == "developing_double_bottom_pressure"
+        and three_bar_majority_bias == "LONG"
+        and three_bar_path_score >= 0.8
+        and (
+            confirmed_bullish_candidates
+            or breakout_authenticity_score >= 0.2
+            or level_reclaim_state in {"bullish_reclaim", "failed_bearish_breakdown_reentry"}
+        )
+    ):
+        structure_semantic_label = "support_reclaim_rotation"
+        structure_semantic_bias = "LONG"
+        structure_semantic_score = max(
+            structure_semantic_score,
+            0.64 + min(0.12, three_bar_path_score * 0.04 + breakout_authenticity_score * 0.18),
+        )
+        structure_semantic_reasons = [
+            "Developing double-bottom is upgraded because reclaim-style behavior and path alignment already support a real bullish handoff",
+            "This is treated as stronger than a generic early bullish pattern because confirmed candidate structure is already present",
+        ]
+    elif (
+        structure_semantic_label == "developing_double_top_pressure"
+        and three_bar_majority_bias == "SHORT"
+        and three_bar_path_score >= 0.8
+        and (
+            confirmed_bearish_candidates
+            or breakout_authenticity_score >= 0.2
+            or level_reclaim_state in {"bearish_reclaim", "failed_bullish_breakout_reentry"}
+        )
+    ):
+        structure_semantic_label = "resistance_failure_rotation"
+        structure_semantic_bias = "SHORT"
+        structure_semantic_score = max(
+            structure_semantic_score,
+            0.64 + min(0.12, three_bar_path_score * 0.04 + breakout_authenticity_score * 0.18),
+        )
+        structure_semantic_reasons = [
+            "Developing double-top is upgraded because resistance-failure behavior and path alignment already support a real bearish handoff",
+            "This is treated as stronger than a generic early bearish pattern because confirmed candidate structure is already present",
+        ]
     votes = _collect_direction_votes(indicator_bias, pattern_features, trend_features)
     long_votes = votes.count("LONG")
     short_votes = votes.count("SHORT")
@@ -2645,8 +2948,40 @@ def extract_decision_features(
                 "hidden_distribution_release",
                 "false_breakout_reentry",
                 "false_breakdown_reentry",
+                "support_reclaim_rotation",
+                "resistance_failure_rotation",
             }
             and structure_semantic_score >= 0.62
+        )
+        or (
+            structure_semantic_label in {"bullish_structure_break", "bearish_structure_break"}
+            and structure_semantic_score >= 0.64
+            and structure_break_state in {"bullish_break", "bearish_break"}
+        )
+        or (
+            structure_semantic_label in {"support_reclaim_rotation", "resistance_failure_rotation"}
+            and structure_semantic_score >= 0.56
+            and (
+                level_reclaim_state in {"bullish_reclaim", "bearish_reclaim"}
+                or recent_breakout_failure_score >= 0.24
+                or (
+                    structure_semantic_bias in {"LONG", "SHORT"}
+                    and three_bar_majority_bias == structure_semantic_bias
+                    and three_bar_path_score >= 0.52
+                )
+            )
+        )
+        or (
+            structure_semantic_label in {"bullish_structure_break", "bearish_structure_break"}
+            and structure_semantic_score >= 0.58
+            and (
+                breakout_authenticity_score >= 0.28
+                or (
+                    structure_semantic_bias in {"LONG", "SHORT"}
+                    and three_bar_majority_bias == structure_semantic_bias
+                    and three_bar_path_score >= 0.6
+                )
+            )
         )
     ):
         structure_confirmation_tier = "confirmed"
@@ -2681,6 +3016,46 @@ def extract_decision_features(
         trend_failure_score += 0.18
         trend_failure_reasons.append("Failed bearish breakdown suggests the prior downside continuation thesis is stale")
 
+    if (
+        structure_semantic_label == "support_reclaim_rotation"
+        and stale_bearish_regime
+        and structure_semantic_score >= 0.56
+        and (
+            level_reclaim_state == "bullish_reclaim"
+            or three_bar_majority_bias == "LONG"
+            or recent_breakout_failure_score >= 0.24
+        )
+    ):
+        trend_failure_score += 0.1
+        trend_failure_reasons.append("Bullish support reclaim structure suggests the older bearish regime is already losing control")
+    elif (
+        structure_semantic_label == "resistance_failure_rotation"
+        and stale_bullish_regime
+        and structure_semantic_score >= 0.56
+        and (
+            level_reclaim_state == "bearish_reclaim"
+            or three_bar_majority_bias == "SHORT"
+            or recent_breakout_failure_score >= 0.24
+        )
+    ):
+        trend_failure_score += 0.1
+        trend_failure_reasons.append("Bearish resistance-failure structure suggests the older bullish regime is already losing control")
+
+    if (
+        structure_semantic_label == "hidden_base_release"
+        and stale_bearish_regime
+        and structure_semantic_score >= 0.66
+    ):
+        trend_failure_score += 0.1
+        trend_failure_reasons.append("Confirmed hidden-base release implies the prior bearish structure is already stale")
+    elif (
+        structure_semantic_label == "hidden_distribution_release"
+        and stale_bullish_regime
+        and structure_semantic_score >= 0.66
+    ):
+        trend_failure_score += 0.1
+        trend_failure_reasons.append("Confirmed hidden-distribution release implies the prior bullish structure is already stale")
+
     if breakout_confirmed and breakout_authenticity_score >= 0.46:
         if pattern_bias_name == "bullish" and stale_bearish_regime:
             trend_failure_score += 0.22
@@ -2712,6 +3087,21 @@ def extract_decision_features(
         trend_failure_score += 0.16
         trend_failure_reasons.append("Bearish structure break directly challenges the stale bullish regime")
 
+    if (
+        structure_semantic_label == "support_reclaim_rotation"
+        and structure_semantic_score >= 0.56
+        and stale_bearish_regime
+    ):
+        trend_failure_score += 0.15
+        trend_failure_reasons.append("Support reclaim rotation says the prior bearish continuation thesis may already be stale")
+    elif (
+        structure_semantic_label == "resistance_failure_rotation"
+        and structure_semantic_score >= 0.56
+        and stale_bullish_regime
+    ):
+        trend_failure_score += 0.15
+        trend_failure_reasons.append("Resistance failure rotation says the prior bullish continuation thesis may already be stale")
+
     if structure_semantic_label in {"false_breakout_reentry", "false_breakdown_reentry"} and structure_semantic_score >= 0.62:
         trend_failure_score += 0.12
         trend_failure_reasons.append("False-break reentry is a direct sign that the previous continuation regime may have failed")
@@ -2724,6 +3114,140 @@ def extract_decision_features(
     elif trend_failure_score >= 0.14:
         trend_failure_state = "early_failure"
 
+    structure_followthrough_score = 0.0
+    if structure_semantic_label != "neutral_structure":
+        structure_followthrough_score += 0.12
+    if breakout_confirmed:
+        structure_followthrough_score += 0.1
+    structure_followthrough_score += min(0.22, breakout_authenticity_score * 0.22)
+    structure_followthrough_score += min(0.14, recent_breakout_followthrough_score * 0.2)
+    if breakout_retest_quality == "healthy":
+        structure_followthrough_score += 0.12
+    elif breakout_retest_quality != "none":
+        structure_followthrough_score += 0.05
+    if (
+        structure_semantic_bias in {"LONG", "SHORT"}
+        and three_bar_majority_bias == structure_semantic_bias
+        and three_bar_path_score >= 0.58
+    ):
+        structure_followthrough_score += 0.08
+    if (
+        structure_semantic_label in {
+            "support_reclaim_rotation",
+            "resistance_failure_rotation",
+            "false_breakout_reentry",
+            "false_breakdown_reentry",
+        }
+        and level_reclaim_state != "none"
+    ):
+        structure_followthrough_score += 0.06
+    if location_state == "near_resistance" and structure_semantic_bias == "LONG" and breakout_state != "bullish_breakout":
+        structure_followthrough_score -= 0.12
+    elif location_state == "near_support" and structure_semantic_bias == "SHORT" and breakout_state != "bearish_breakdown":
+        structure_followthrough_score -= 0.12
+    if structure_semantic_bias == "LONG" and short_horizon_bias == "bearish_pullback_candidate":
+        structure_followthrough_score -= 0.07
+    elif structure_semantic_bias == "SHORT" and short_horizon_bias == "bullish_rebound_candidate":
+        structure_followthrough_score -= 0.07
+    structure_followthrough_score = round(min(1.0, max(0.0, structure_followthrough_score)), 4)
+    structure_followthrough_state = _classify_quality_band(
+        structure_followthrough_score,
+        high_threshold=0.52,
+        medium_threshold=0.34,
+    )
+
+    countertrend_pressure_score = 0.0
+    countertrend_pressure_bias = "none"
+    if structure_semantic_bias == "SHORT" or continuation_bias == "bearish_continuation_candidate":
+        countertrend_pressure_bias = "LONG"
+        if short_horizon_bias == "bullish_rebound_candidate":
+            countertrend_pressure_score += 0.24 + min(0.18, short_horizon_score * 0.1)
+        if location_state == "near_support" and breakout_state != "bearish_breakdown":
+            countertrend_pressure_score += 0.14
+        if bullish_candidate_hint_top_conf >= 0.7:
+            countertrend_pressure_score += 0.1
+        if breakout_authenticity_score < 0.3:
+            countertrend_pressure_score += 0.08
+        if trend_exhaustion_risk == "high":
+            countertrend_pressure_score += 0.1
+        elif continuation_exhaustion_risk in {"medium", "high"}:
+            countertrend_pressure_score += 0.07
+        if recent_breakout_followthrough_score < 0.1 and breakout_retest_quality == "none":
+            countertrend_pressure_score += 0.06
+    elif structure_semantic_bias == "LONG" or continuation_bias == "bullish_continuation_candidate":
+        countertrend_pressure_bias = "SHORT"
+        if short_horizon_bias == "bearish_pullback_candidate":
+            countertrend_pressure_score += 0.24 + min(0.18, short_horizon_score * 0.1)
+        if location_state == "near_resistance" and breakout_state != "bullish_breakout":
+            countertrend_pressure_score += 0.14
+        if bearish_candidate_hint_top_conf >= 0.7:
+            countertrend_pressure_score += 0.1
+        if breakout_authenticity_score < 0.3:
+            countertrend_pressure_score += 0.08
+        if trend_exhaustion_risk == "high":
+            countertrend_pressure_score += 0.1
+        elif continuation_exhaustion_risk in {"medium", "high"}:
+            countertrend_pressure_score += 0.07
+        if recent_breakout_followthrough_score < 0.1 and breakout_retest_quality == "none":
+            countertrend_pressure_score += 0.06
+    countertrend_pressure_score = round(min(1.0, max(0.0, countertrend_pressure_score)), 4)
+    countertrend_pressure_state = _classify_quality_band(
+        countertrend_pressure_score,
+        high_threshold=0.48,
+        medium_threshold=0.28,
+    )
+
+    continuation_integrity_score = 0.0
+    if continuation_bias != "none":
+        continuation_integrity_score += 0.22 + min(0.18, continuation_score * 0.08)
+        if trend_continuation_quality == "high":
+            continuation_integrity_score += 0.16
+        elif trend_continuation_quality == "medium":
+            continuation_integrity_score += 0.08
+        continuation_integrity_score += min(0.12, float(trend_features.get("channel_stability_score", 0.0) or 0.0) * 0.12)
+        continuation_integrity_score += min(0.08, recent_breakout_followthrough_score * 0.12)
+        continuation_integrity_score += min(0.08, breakout_authenticity_score * 0.08)
+        if continuation_bias == "bullish_continuation_candidate":
+            if location_state == "near_resistance" and breakout_state != "bullish_breakout":
+                continuation_integrity_score -= 0.1
+            if structure_break_state == "bearish_break":
+                continuation_integrity_score -= 0.14
+            if bearish_candidate_hint_top_conf >= 0.82:
+                continuation_integrity_score -= 0.08
+        elif continuation_bias == "bearish_continuation_candidate":
+            if location_state == "near_support" and breakout_state != "bearish_breakdown":
+                continuation_integrity_score -= 0.1
+            if structure_break_state == "bullish_break":
+                continuation_integrity_score -= 0.14
+            if bullish_candidate_hint_top_conf >= 0.82:
+                continuation_integrity_score -= 0.08
+        if trend_failure_state == "early_failure":
+            continuation_integrity_score -= 0.1
+        elif trend_failure_state == "probable_failure":
+            continuation_integrity_score -= 0.16
+        elif trend_failure_state == "confirmed_failure":
+            continuation_integrity_score -= 0.22
+    continuation_integrity_score = round(min(1.0, max(0.0, continuation_integrity_score)), 4)
+    continuation_integrity_state = _classify_quality_band(
+        continuation_integrity_score,
+        high_threshold=0.54,
+        medium_threshold=0.34,
+    )
+    fragile_structure_handoff = (
+        structure_confirmation_tier == "confirmed"
+        and structure_semantic_label in {
+            "hidden_base_release",
+            "hidden_distribution_release",
+            "false_breakout_reentry",
+            "false_breakdown_reentry",
+            "support_reclaim_rotation",
+            "resistance_failure_rotation",
+            "bullish_structure_break",
+            "bearish_structure_break",
+        }
+        and structure_followthrough_state == "low"
+        and countertrend_pressure_state == "high"
+    )
     path_semantic_role = "support_only"
     if forecast_horizon_bars >= 3 and stable_three_bar_path and three_bar_path_score >= 0.82:
         path_semantic_role = "sequence_confirmed"
@@ -2762,6 +3286,49 @@ def extract_decision_features(
         confirmed_structure_bias = structure_semantic_bias
         confirmed_structure_score += min(0.14, 0.06 + structure_semantic_score * 0.1)
         confirmed_structure_reasons.extend(structure_semantic_reasons[:2])
+    elif (
+        structure_semantic_label in {"support_reclaim_rotation", "resistance_failure_rotation"}
+        and structure_semantic_bias in {"LONG", "SHORT"}
+        and structure_semantic_score >= 0.56
+    ):
+        confirmed_structure_bias = structure_semantic_bias
+        confirmed_structure_score += min(0.13, 0.055 + structure_semantic_score * 0.095)
+        confirmed_structure_reasons.extend(structure_semantic_reasons[:2])
+        confirmed_structure_reasons.append("Support/resistance reclaim rotation is strong enough to challenge a weak algorithmic baseline")
+        if (
+            three_bar_majority_bias == structure_semantic_bias
+            and three_bar_path_score >= 0.52
+        ) or level_reclaim_state in {
+            "bullish_reclaim",
+            "bearish_reclaim",
+            "failed_bullish_breakout_reentry",
+            "failed_bearish_breakdown_reentry",
+        }:
+            confirmed_structure_score += 0.05
+            confirmed_structure_reasons.append("Path alignment or reclaim evidence upgrades the rotation from hint to usable structure")
+    if (
+        structure_semantic_label in {"false_breakout_reentry", "false_breakdown_reentry"}
+        and structure_semantic_bias in {"LONG", "SHORT"}
+        and structure_semantic_score >= 0.6
+    ):
+        confirmed_structure_bias = structure_semantic_bias
+        confirmed_structure_score += min(0.15, 0.06 + structure_semantic_score * 0.1)
+        confirmed_structure_reasons.extend(structure_semantic_reasons[:2])
+        confirmed_structure_reasons.append("False-break reentry is one of the cleaner structure shifts that should challenge stale continuation")
+    if (
+        structure_semantic_label == "neutral_structure"
+        and breakout_confirmed
+        and pattern_name in {"double_bottom", "double_top"}
+        and pattern_geometry_score >= 0.52
+        and breakout_authenticity_score >= 0.14
+        and three_bar_majority_bias in {"LONG", "SHORT"}
+    ):
+        confirmed_structure_bias = "LONG" if pattern_name == "double_bottom" else "SHORT"
+        confirmed_structure_score += 0.11
+        confirmed_structure_reasons.append("Confirmed double-top/double-bottom geometry is strong enough to challenge a stale base case even before richer semantics appear")
+        if three_bar_majority_bias == confirmed_structure_bias and three_bar_path_score >= 0.62:
+            confirmed_structure_score += 0.04
+            confirmed_structure_reasons.append("Three-bar path aligns with the confirmed classic structure")
     if confirmed_structure_bias == "LONG" and trend_failure_state in {"probable_failure", "confirmed_failure"}:
         confirmed_structure_score += 0.08 if trend_failure_state == "confirmed_failure" else 0.05
         confirmed_structure_reasons.append("Confirmed long structure is reinforced because the stale bearish regime is already failing")
@@ -2778,10 +3345,15 @@ def extract_decision_features(
         "false_breakdown_reentry",
         "compression_release_breakout",
         "compression_release_breakdown",
+        "support_reclaim_rotation",
+        "resistance_failure_rotation",
+        "bullish_structure_break",
+        "bearish_structure_break",
     }
     if confirmed_structure_bias in {"LONG", "SHORT"}:
         if (
             structure_confirmation_tier == "confirmed"
+            and not fragile_structure_handoff
             and (
                 structure_semantic_label in confirmed_structure_priority_labels
                 or breakout_retest_quality == "healthy"
@@ -3248,6 +3820,103 @@ def extract_decision_features(
         short_score = max(0.0, short_score - 0.14)
         structural_reasons.extend(channel_dominance_reasons[:2])
         structural_reasons.append("Local bearish pullback is treated as a counter-trend pause inside a dominant bullish channel")
+    if (
+        structure_semantic_label == "trend_channel_continuation"
+        and structure_semantic_bias in {"LONG", "SHORT"}
+        and three_bar_majority_bias in {"LONG", "SHORT"}
+        and three_bar_majority_bias != structure_semantic_bias
+        and three_bar_path_score >= 0.62
+    ):
+        if structure_semantic_bias == "LONG":
+            long_score = max(0.0, long_score - 0.12)
+        else:
+            short_score = max(0.0, short_score - 0.12)
+        structural_reasons.append("Trend-channel continuation is downgraded because the three-bar path is already leaning the other way")
+    if (
+        structure_semantic_label == "trend_channel_continuation"
+        and structure_semantic_bias == "LONG"
+        and confirmed_bearish_candidates
+        and three_bar_majority_bias == "SHORT"
+    ):
+        long_score = max(0.0, long_score - 0.14)
+        structural_reasons.append("Bullish trend-channel continuation is downgraded because confirmed bearish candidate structure already exists against it")
+    elif (
+        structure_semantic_label == "trend_channel_continuation"
+        and structure_semantic_bias == "SHORT"
+        and confirmed_bullish_candidates
+        and three_bar_majority_bias == "LONG"
+    ):
+        short_score = max(0.0, short_score - 0.14)
+        structural_reasons.append("Bearish trend-channel continuation is downgraded because confirmed bullish candidate structure already exists against it")
+
+    if (
+        structure_semantic_label == "trend_channel_continuation"
+        and structure_semantic_bias == "SHORT"
+        and broad_bullish_candidate_count >= 1
+        and continuation_bias == "none"
+        and not breakout_confirmed
+        and breakout_authenticity_score < 0.08
+        and three_bar_majority_bias == "SHORT"
+        and three_bar_path_consistency >= 0.99
+        and three_bar_path_score >= 0.9
+    ):
+        short_score = max(0.0, short_score - 0.18)
+        long_score += 0.05
+        structural_reasons.append(
+            "Bearish trend-channel continuation is downgraded because path-only continuation without breakout confirmation is too fragile when opposite bullish candidate structure still survives"
+        )
+
+    if (
+        structure_semantic_bias == "SHORT"
+        and structure_semantic_label in {
+            "developing_double_top_pressure",
+            "bearish_structure_break",
+            "hidden_distribution_release",
+            "resistance_failure_rotation",
+            "false_breakout_reentry",
+        }
+        and not breakout_confirmed
+        and trend_failure_state == "intact"
+        and three_bar_path_score <= 0.62
+        and breakout_authenticity_score < 0.22
+    ):
+        short_score = max(0.0, short_score - 0.18)
+        structural_reasons.append(
+            "Bearish structure is downgraded because authenticity and follow-through remain too weak to justify a decisive short read"
+        )
+        if len(bullish_candidate_hints) >= len(bearish_candidate_hints) and bullish_candidate_hints:
+            short_score = max(0.0, short_score - 0.08)
+            long_score += 0.05
+            structural_reasons.append(
+                "Opposite bullish candidate structure is still alive, so the weak bearish read is treated as a fragile ceiling rather than a decisive breakdown"
+            )
+
+    if (
+        structure_semantic_bias == "SHORT"
+        and structure_semantic_label in {
+            "developing_double_top_pressure",
+            "bearish_structure_break",
+            "hidden_distribution_release",
+            "resistance_failure_rotation",
+            "false_breakout_reentry",
+        }
+        and ambiguous_high_conf_candidate_conflict
+        and broad_bearish_candidate_count <= broad_bullish_candidate_count
+        and breakout_state != "bearish_breakdown"
+        and not breakout_confirmed
+        and breakout_authenticity_score < 0.3
+    ):
+        short_score = max(0.0, short_score - 0.2)
+        long_score += 0.06
+        structural_reasons.append(
+            "Bearish structure is heavily downgraded because bullish and bearish candidate structures are both strong while downside breakout confirmation is still missing"
+        )
+        if short_horizon_bias == "bullish_rebound_candidate":
+            short_score = max(0.0, short_score - 0.06)
+            long_score += 0.04
+            structural_reasons.append(
+                "Bullish rebound pressure is still present, so the ambiguous bearish setup is treated as a likely fake handoff"
+            )
 
     # Late-trend reversals often start with momentum weakening before the price
     # structure fully breaks. If momentum is already disagreeing with a
@@ -3550,6 +4219,10 @@ def extract_decision_features(
             "hidden_distribution_release",
             "false_breakout_reentry",
             "false_breakdown_reentry",
+            "support_reclaim_rotation",
+            "resistance_failure_rotation",
+            "bullish_structure_break",
+            "bearish_structure_break",
         }
         and trend_failure_state in {"early_failure", "intact"}
     ):
@@ -3561,10 +4234,19 @@ def extract_decision_features(
         and channel_dominance_score >= 0.26
         and not breakout_confirmed
         and not reversal_confirmed
+        and continuation_integrity_state != "low"
     ):
         decision_authority_regime = "trend_inertia_priority"
         authority_owner = "algorithm"
         authority_reasons.append("Dominant channel structure should outweigh premature counter-trend flips")
+    elif (
+        structure_semantic_label == "trend_channel_continuation"
+        and continuation_integrity_state == "low"
+        and trend_failure_state in {"early_failure", "probable_failure", "confirmed_failure"}
+    ):
+        decision_authority_regime = "structure_present_execution_uncertain"
+        authority_owner = "shared"
+        authority_reasons.append("Trend continuation remains visible, but its integrity is degrading, so stale channel inertia should not own direction outright")
     elif forecast_horizon_bars <= 2 and short_horizon_bias != "none" and short_horizon_score >= 1.45:
         decision_authority_regime = "micro_reaction_priority"
         authority_owner = "ai_calibrator"
@@ -3598,11 +4280,17 @@ def extract_decision_features(
         not hard_case
         and dominant_side in {"LONG", "SHORT"}
         and consensus_level == "strong"
-        and adjusted_confidence >= 0.12
+        and adjusted_confidence >= 0.16
+        and dominance_ratio >= 0.2
         and not weak_environment
         and not evidence_conflict
         and not location_is_poor
         and not high_false_breakout_risk
+        and (
+            channel_dominance_score >= 0.26
+            or structure_confirmation_tier == "confirmed"
+        )
+        and trend_failure_state == "intact"
     )
 
     if should_abstain or hard_case_score >= 0.55:
@@ -3654,6 +4342,7 @@ def extract_decision_features(
         "breakout_authenticity_score": round(breakout_authenticity_score, 4),
         "breakout_body_ratio": round(breakout_body_ratio, 4),
         "breakout_retest_quality": breakout_retest_quality,
+        "structure_break_state": structure_break_state,
         "candidate_patterns": candidate_patterns[:5],
         "candidate_pattern_summaries": candidate_pattern_summaries[:5],
         "structure_semantic_label": structure_semantic_label,
@@ -3682,8 +4371,15 @@ def extract_decision_features(
         "continuation_bias": continuation_bias,
         "continuation_score": round(continuation_score, 4),
         "continuation_exhaustion_risk": continuation_exhaustion_risk,
+        "continuation_integrity_score": continuation_integrity_score,
+        "continuation_integrity_state": continuation_integrity_state,
         "short_horizon_bias": short_horizon_bias,
         "short_horizon_score": round(short_horizon_score, 4),
+        "structure_followthrough_score": structure_followthrough_score,
+        "structure_followthrough_state": structure_followthrough_state,
+        "countertrend_pressure_bias": countertrend_pressure_bias,
+        "countertrend_pressure_score": countertrend_pressure_score,
+        "countertrend_pressure_state": countertrend_pressure_state,
         "confirmed_structure_bias": confirmed_structure_bias.upper(),
         "confirmed_structure_score": confirmed_structure_score,
         "confirmed_structure_strength": confirmed_structure_strength,
@@ -3704,6 +4400,9 @@ def extract_decision_features(
         "three_bar_path_reasons": three_bar_path_signal["three_bar_path_reasons"],
         "trend_alignment_state": str(trend_features.get("trend_alignment_state", "mixed_transition")),
         "channel_direction": channel_direction,
+        "channel_stability_score": float(trend_features.get("channel_stability_score", 0.0) or 0.0),
+        "trend_continuation_quality": trend_continuation_quality,
+        "trend_exhaustion_risk": trend_exhaustion_risk,
         "breakout_margin_pct": round(breakout_margin_pct, 4),
         "forecast_horizon_bars": forecast_horizon_bars,
         "supporting_reasons": (

@@ -68,22 +68,32 @@ def _summarize_frame(df: pd.DataFrame) -> Dict[str, Any]:
             "accuracy_report": {
                 "num_samples": 0,
                 "accuracy": None,
+                "final_direction_accuracy": None,
+                "horizon_majority_accuracy": None,
                 "avg_confidence": None,
                 "num_neutral_predictions": 0,
                 "actionable_num_samples": 0,
                 "actionable_coverage": 0.0,
                 "actionable_accuracy": None,
+                "final_direction_actionable_accuracy": None,
                 "num_neutral_moves": 0,
                 "filtered_num_samples": 0,
                 "filtered_accuracy_ex_neutral": None,
+                "final_direction_filtered_accuracy_ex_neutral": None,
                 "filtered_actionable_num_samples": 0,
                 "filtered_actionable_accuracy": None,
                 "asset_accuracy": {},
+                "asset_final_direction_accuracy": {},
                 "details": [],
             }
         }
 
-    accuracy = round(float(df["correct"].mean()), 4)
+    if "final_direction_correct" not in df.columns:
+        df["final_direction_correct"] = (df["predicted"].astype(str).str.upper() == df["true_direction"].astype(str).str.upper()).astype(int)
+    if "horizon_majority_correct" not in df.columns:
+        df["horizon_majority_correct"] = df["correct"].astype(int)
+    accuracy = round(float(df["horizon_majority_correct"].mean()), 4)
+    final_direction_accuracy = round(float(df["final_direction_correct"].mean()), 4)
     horizon_total = int(df["horizon_total_count"].sum()) if "horizon_total_count" in df.columns else int(len(df))
     horizon_correct = int(df["horizon_correct_count"].sum()) if "horizon_correct_count" in df.columns else int(df["correct"].sum())
     horizon_step_accuracy = None if horizon_total == 0 else round(float(horizon_correct / horizon_total), 4)
@@ -91,26 +101,36 @@ def _summarize_frame(df: pd.DataFrame) -> Dict[str, Any]:
     actionable_df = df[df["is_neutral_prediction"] == 0]
     strong_move_df = df[df["is_neutral_move"] == 0]
     strong_move_actionable_df = strong_move_df[strong_move_df["is_neutral_prediction"] == 0]
-    asset_accuracy = df.groupby("asset")["correct"].mean().round(4).to_dict()
+    asset_accuracy = df.groupby("asset")["horizon_majority_correct"].mean().round(4).to_dict()
+    asset_final_direction_accuracy = df.groupby("asset")["final_direction_correct"].mean().round(4).to_dict()
 
     return {
         "accuracy_report": {
             "num_samples": int(len(df)),
             "accuracy": accuracy,
+            "final_direction_accuracy": final_direction_accuracy,
+            "horizon_majority_accuracy": accuracy,
             "horizon_step_accuracy": horizon_step_accuracy,
             "avg_confidence": avg_confidence,
             "num_neutral_predictions": int(df["is_neutral_prediction"].sum()),
             "actionable_num_samples": int(len(actionable_df)),
             "actionable_coverage": round(float(len(actionable_df) / len(df)), 4),
-            "actionable_accuracy": None if actionable_df.empty else round(float(actionable_df["correct"].mean()), 4),
+            "actionable_accuracy": None if actionable_df.empty else round(float(actionable_df["horizon_majority_correct"].mean()), 4),
+            "final_direction_actionable_accuracy": None
+            if actionable_df.empty
+            else round(float(actionable_df["final_direction_correct"].mean()), 4),
             "num_neutral_moves": int(df["is_neutral_move"].sum()),
             "filtered_num_samples": int(len(strong_move_df)),
-            "filtered_accuracy_ex_neutral": None if strong_move_df.empty else round(float(strong_move_df["correct"].mean()), 4),
+            "filtered_accuracy_ex_neutral": None if strong_move_df.empty else round(float(strong_move_df["horizon_majority_correct"].mean()), 4),
+            "final_direction_filtered_accuracy_ex_neutral": None
+            if strong_move_df.empty
+            else round(float(strong_move_df["final_direction_correct"].mean()), 4),
             "filtered_actionable_num_samples": int(len(strong_move_actionable_df)),
             "filtered_actionable_accuracy": None
             if strong_move_actionable_df.empty
-            else round(float(strong_move_actionable_df["correct"].mean()), 4),
+            else round(float(strong_move_actionable_df["horizon_majority_correct"].mean()), 4),
             "asset_accuracy": asset_accuracy,
+            "asset_final_direction_accuracy": asset_final_direction_accuracy,
             "details": df.to_dict(orient="records"),
         }
     }
@@ -164,10 +184,9 @@ def _extract_summary_table(summary: Dict[str, Any]) -> pd.DataFrame:
             {
                 "system": system,
                 "label": SYSTEM_LABELS[system],
-                "accuracy": report.get("accuracy"),
-                "horizon_step_accuracy": report.get("horizon_step_accuracy"),
-                "filtered_accuracy_ex_neutral": report.get("filtered_accuracy_ex_neutral"),
-                "actionable_accuracy": report.get("actionable_accuracy"),
+                "final_direction_accuracy": report.get("final_direction_accuracy"),
+                "final_direction_filtered_accuracy_ex_neutral": report.get("final_direction_filtered_accuracy_ex_neutral"),
+                "final_direction_actionable_accuracy": report.get("final_direction_actionable_accuracy"),
                 "actionable_coverage": report.get("actionable_coverage"),
                 "avg_confidence": report.get("avg_confidence"),
                 "num_samples": report.get("num_samples"),
@@ -179,20 +198,18 @@ def _extract_summary_table(summary: Dict[str, Any]) -> pd.DataFrame:
 def _save_metric_chart(summary_df: pd.DataFrame, output_path: Path) -> None:
     fig, ax = plt.subplots(figsize=(9, 5.5))
     x = range(len(summary_df))
-    width = 0.18
+    width = 0.22
 
-    accuracy = summary_df["accuracy"].fillna(0.0).tolist()
-    horizon = summary_df["horizon_step_accuracy"].fillna(0.0).tolist()
-    filtered = summary_df["filtered_accuracy_ex_neutral"].fillna(0.0).tolist()
-    actionable = summary_df["actionable_accuracy"].fillna(0.0).tolist()
+    final_accuracy = summary_df["final_direction_accuracy"].fillna(0.0).tolist()
+    filtered = summary_df["final_direction_filtered_accuracy_ex_neutral"].fillna(0.0).tolist()
+    actionable = summary_df["final_direction_actionable_accuracy"].fillna(0.0).tolist()
     colors = [SYSTEM_COLORS[s] for s in summary_df["system"]]
 
-    ax.bar([i - 1.5 * width for i in x], accuracy, width=width, label="Accuracy", color=colors, alpha=0.95)
-    ax.bar([i - 0.5 * width for i in x], horizon, width=width, label="3-Bar Step Accuracy", color=colors, alpha=0.78)
-    ax.bar([i + 0.5 * width for i in x], filtered, width=width, label="Filtered Accuracy", color=colors, alpha=0.6)
-    ax.bar([i + 1.5 * width for i in x], actionable, width=width, label="Actionable Accuracy", color=colors, alpha=0.42)
+    ax.bar([i - width for i in x], final_accuracy, width=width, label="Final Direction Accuracy", color=colors, alpha=0.98)
+    ax.bar([i + 0.0 for i in x], actionable, width=width, label="Final Direction Actionable Accuracy", color=colors, alpha=0.76)
+    ax.bar([i + width for i in x], filtered, width=width, label="Final Direction Filtered Accuracy", color=colors, alpha=0.58)
 
-    ax.set_title("Three-System Accuracy Comparison")
+    ax.set_title("Three-System Final-Direction Metrics Comparison")
     ax.set_ylabel("Score")
     ax.set_ylim(0, 1)
     ax.set_xticks(list(x))
@@ -201,10 +218,9 @@ def _save_metric_chart(summary_df: pd.DataFrame, output_path: Path) -> None:
     ax.legend()
 
     for offset, values in [
-        (-1.5 * width, accuracy),
-        (-0.5 * width, horizon),
-        (0.5 * width, filtered),
-        (1.5 * width, actionable),
+        (-width, final_accuracy),
+        (0.0, actionable),
+        (width, filtered),
     ]:
         for i, value in enumerate(values):
             ax.text(i + offset, value + 0.02, f"{value:.3f}", ha="center", va="bottom", fontsize=9)
@@ -295,40 +311,45 @@ def _save_sample_comparison_chart(system_frames: Dict[str, pd.DataFrame], output
 
 
 def _build_explanation_text(results_dir: Path, summary_df: pd.DataFrame) -> str:
-    best_accuracy_row = summary_df.sort_values("accuracy", ascending=False).iloc[0]
-    best_filtered_row = summary_df.sort_values("filtered_accuracy_ex_neutral", ascending=False).iloc[0]
+    best_final_accuracy_row = summary_df.sort_values("final_direction_accuracy", ascending=False).iloc[0]
+    best_actionable_row = summary_df.sort_values("final_direction_actionable_accuracy", ascending=False).iloc[0]
+    best_filtered_row = summary_df.sort_values("final_direction_filtered_accuracy_ex_neutral", ascending=False).iloc[0]
 
     lines: List[str] = []
     lines.append("# Integrated Comparison Figure Notes")
     lines.append("")
     lines.append(f"- Results directory: `{results_dir}`")
-    lines.append(f"- Best overall accuracy: `{best_accuracy_row['label']}` = `{best_accuracy_row['accuracy']:.4f}`")
+    lines.append(f"- Best final direction accuracy: `{best_final_accuracy_row['label']}` = `{best_final_accuracy_row['final_direction_accuracy']:.4f}`")
+    lines.append(f"- Best actionable final direction accuracy: `{best_actionable_row['label']}` = `{best_actionable_row['final_direction_actionable_accuracy']:.4f}`")
     lines.append(
-        f"- Best filtered accuracy: `{best_filtered_row['label']}` = `{best_filtered_row['filtered_accuracy_ex_neutral']:.4f}`"
+        f"- Best filtered final direction accuracy: `{best_filtered_row['label']}` = `{best_filtered_row['final_direction_filtered_accuracy_ex_neutral']:.4f}`"
     )
     lines.append("")
     lines.append("## Suggested interpretation")
     lines.append("")
     lines.append(
-        "- The accuracy chart should be read first. It shows which system achieves the most stable directional prediction performance."
+        "- Read final direction accuracy first because it directly measures whether the model predicts the correct direction at the end of the forecast horizon."
     )
     lines.append(
-        "- The filtered-accuracy metric is especially important because it removes very small future moves and better reflects truly directional opportunities."
+        "- Final direction actionable accuracy is the second most important metric because it shows whether executable, non-neutral decisions are correct under the same end-of-horizon criterion."
     )
     lines.append(
-        "- The confidence chart should be interpreted cautiously. If a system has high average confidence but lower accuracy, it may be overconfident rather than more capable."
+        "- Actionable coverage remains important, but it is better reported in tables or text than mixed into the main thesis bar chart."
+    )
+    lines.append(
+        "- The filtered final-direction metric is useful as a supplementary view because it removes very small future moves and better reflects clearer directional opportunities."
+    )
+    lines.append(
+        "- The confidence chart and sample-level comparison chart should be treated as supplementary materials rather than headline thesis figures."
     )
     lines.append(
         "- For QuantAgent, a zero confidence value may reflect missing confidence output in the original JSON schema rather than true lack of confidence."
-    )
-    lines.append(
-        "- The sample-level comparison figure is useful for case analysis because it shows exactly which samples the three systems agree on and where they diverge."
     )
     lines.append("")
     lines.append("## Recommended paper wording")
     lines.append("")
     lines.append(
-        "The comparison results indicate that the pure algorithm baseline currently provides the strongest directional stability on the tested BTC 1h sample subset, while KuantAgent improves upon the original QuantAgent but still has room to enhance AI-side correction capability. This suggests that the deterministic analysis layer already contributes substantial predictive value, whereas the current intelligent decision layer tends to amplify existing signals more often than it corrects them."
+        "The comparison results should be interpreted primarily through final-direction metrics. Under this criterion, KuantAgent demonstrates the strongest end-of-horizon directional prediction performance on the tested BTC 1h benchmark, while actionable accuracy and coverage together indicate that this advantage is not obtained solely by excessive abstention."
     )
     return "\n".join(lines)
 

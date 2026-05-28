@@ -11,5 +11,9 @@ DEFAULT_CONFIG = {
     "api_key": "",
     "anthropic_api_key": "",
     "qwen_api_key": "",
+    "siliconflow_api_key": "",
+    "mimo_api_key": "",
+    "qwen_base_url": "",
+    "qwen_api_env_name": "",
     "use_multimodal_images": False,
 }

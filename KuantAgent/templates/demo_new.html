@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>QuantAgent - Multi-Agent Trading System</title>
+    <title>KuantAgent - Structured Multi-Agent Trading System</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -890,20 +890,20 @@
                                         
                                     </div>
                                     <div style="display: flex; align-items: center; justify-content: center; gap: 0rem; margin-bottom: 0.5rem;">
-                                        <img src="assets/darklogo.png" alt="QuantAgent Logo" style="width: 7rem; height: 7rem; object-fit: contain; background: transparent; box-shadow: none; border: none; border-radius: 0; transform: translateY(0.5rem);">
-                                        <span style="font-size: 4.0rem; font-weight: 700; color: white; line-height: 1.0;">QuantAgent:</span>
+                                        <img src="assets/darklogo.png" alt="KuantAgent Logo" style="width: 7rem; height: 7rem; object-fit: contain; background: transparent; box-shadow: none; border: none; border-radius: 0; transform: translateY(0.5rem);">
+                                        <span style="font-size: 4.0rem; font-weight: 700; color: white; line-height: 1.0;">KuantAgent</span>
                                     </div>
                                     <div class="text-center">
-                                        <span class="title-highlight">Multi-Agent Trading System</span>
+                                        <span class="title-highlight">Structured Multi-Agent Trading System</span>
                                     </div>
                                 </h1>
-                                <p class="text-lg text-white mb-8" style="font-size: 1.3rem; margin-top: 1.5rem;">Advanced multi-agent system combining technical indicators, pattern recognition, and trend analysis for comprehensive market insights.</p>
+                                <p class="text-lg text-white mb-8" style="font-size: 1.3rem; margin-top: 1.5rem;">A research-grade trading analysis interface that acquires market data, standardizes OHLC inputs, extracts structured evidence, and produces multi-agent calibrated decisions.</p>
 
                                 <!-- Buttons -->
                                 <div class="max-w-xs mx-auto sm:max-w-none sm:flex sm:justify-center mb-12 md:mb-0">
                                     <div>
                                         <a class="hero-btn" href="#analysis">
-                                            <span class="hero-btn-text">Start Analysis</span>
+                                            <span class="hero-btn-text">Launch Software Demo</span>
                                             <span class="hero-btn-icon">
                                                 <i class="fas fa-arrow-right"></i>
                                             </span>
@@ -940,6 +940,29 @@
                                 <h4 class="panel-title">
                                     <i class="fas fa-database"></i> Data Selection
                                 </h4>
+
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <i class="fas fa-random"></i> Data Source
+                                    </label>
+                                    <div class="asset-button-grid" style="grid-template-columns: repeat(2, minmax(160px, 1fr));">
+                                        <button type="button" class="asset-btn source-btn active" data-source="live" onclick="selectDataSource(this, 'live')">
+                                            <i class="fas fa-satellite-dish"></i> Live Feed
+                                        </button>
+                                        <button type="button" class="asset-btn source-btn" data-source="upload" onclick="selectDataSource(this, 'upload')">
+                                            <i class="fas fa-file-upload"></i> CSV Upload
+                                        </button>
+                                    </div>
+                                    <small class="form-text text-muted">Live mode uses Yahoo Finance. Upload mode accepts local CSV/XLSX files and sends them through the same data-processing pipeline.</small>
+                                </div>
+
+                                <div id="uploadDataPanel" class="form-group" style="display: none;">
+                                    <label class="form-label">
+                                        <i class="fas fa-file-csv"></i> Local Market File
+                                    </label>
+                                    <input type="file" class="form-control" id="marketFileInput" accept=".csv,.xlsx,.xls">
+                                    <small class="form-text text-muted">Upload raw or pre-cleaned market data with timestamp and OHLC columns. The software will normalize fields before analysis.</small>
+                                </div>
                                 
                                 <!-- Asset Selection -->
                                 <div class="form-group">
@@ -1019,7 +1042,7 @@
                             </div>
                             
                             <!-- Panel 2: Date & Time Configuration -->
-                            <div class="panel">
+                            <div class="panel" id="datePanel">
                                 <h4 class="panel-title">
                                     <i class="fas fa-calendar-alt"></i> Date & Time Configuration
                                 </h4>
@@ -1166,6 +1189,14 @@
                                     </div>
                                     
                                     <div class="security-item">
+                                        <i class="fas fa-filter security-icon"></i>
+                                        <div class="security-content">
+                                            <strong>Data Processing Layer</strong>
+                                            <p>Both live feeds and uploaded files are standardized into a unified OHLC window before the multi-agent workflow begins.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="security-item">
                                         <i class="fas fa-shield-alt security-icon"></i>
                                         <div class="security-content">
                                             <strong>Data Privacy</strong>
@@ -1179,7 +1210,7 @@
                         <!-- Run Analysis Button -->
                         <div class="text-center" style="margin-top: 2rem;">
                             <button class="btn btn-primary btn-lg" id="analyzeBtn" onclick="runAnalysis()" style="padding: 1.5rem 3rem; font-size: 1.3rem; border-radius: 15px;">
-                                <i class="fas fa-play"></i> Run Analysis
+                                <i class="fas fa-play"></i> Run KuantAgent Analysis
                             </button>
                         </div>
                     </div>
@@ -1473,6 +1504,11 @@
             
             // Check API key status on page load
             checkApiKeyStatus();
+
+            const defaultSourceBtn = document.querySelector('.source-btn.active') || document.querySelector('.source-btn[data-source="live"]');
+            if (defaultSourceBtn) {
+                selectDataSource(defaultSourceBtn, defaultSourceBtn.dataset.source);
+            }
             
             // Set initial provider dropdown state
             const savedProvider = localStorage.getItem('quantagent_provider') || 'openai';
@@ -1522,6 +1558,25 @@
                  // Global variables
          let selectedAsset = '';
          let selectedTimeframe = '1h'; // Default timeframe
+         let selectedDataSource = 'live';
+
+         function selectDataSource(button, source) {
+             document.querySelectorAll('.source-btn').forEach(btn => btn.classList.remove('active'));
+             button.classList.add('active');
+             selectedDataSource = source;
+
+             const uploadPanel = document.getElementById('uploadDataPanel');
+             const datePanel = document.getElementById('datePanel');
+             if (source === 'upload') {
+                 uploadPanel.style.display = 'block';
+                 datePanel.style.opacity = '0.55';
+                 datePanel.style.pointerEvents = 'none';
+             } else {
+                 uploadPanel.style.display = 'none';
+                 datePanel.style.opacity = '1';
+                 datePanel.style.pointerEvents = 'auto';
+             }
+         }
          
          function selectAsset(button, asset) {
              // Remove active class from all asset buttons
@@ -1619,8 +1674,8 @@
             console.log(`Custom asset "${symbol}" selected and persisted`);
          }
         
-                 function runAnalysis() {
-             const dataSource = 'live'; // Always use live data
+         function runAnalysis() {
+             const dataSource = selectedDataSource;
              const timeframe = selectedTimeframe;
              
              // Get asset value from selected asset
@@ -1638,11 +1693,19 @@
              const endDate = document.getElementById('endDate').value;
              const endTime = document.getElementById('endTime').value;
              const useCurrentTime = document.getElementById('useCurrentTime').checked;
+             const uploadedFile = document.getElementById('marketFileInput').files[0];
              
-             // Validate dates
-             if (!startDate || !endDate) {
-                 alert('Please select both start and end dates.');
-                 return;
+             if (dataSource === 'upload') {
+                 if (!uploadedFile) {
+                     alert('Please upload a CSV or Excel file before running analysis.');
+                     return;
+                 }
+             } else {
+                 // Validate dates
+                 if (!startDate || !endDate) {
+                     alert('Please select both start and end dates.');
+                     return;
+                 }
              }
              
              // Show loading state
@@ -1652,26 +1715,41 @@
              analyzeBtn.disabled = true;
              
              // Prepare request data
-             const requestData = {
-                 data_source: dataSource,
-                 asset: asset,
-                 timeframe: timeframe,
-                 start_date: startDate,
-                 start_time: startTime,
-                 end_date: endDate,
-                 end_time: endTime,
-                 use_current_time: useCurrentTime,
-                 redirect_to_output: true
-             };
+             let requestOptions;
+             if (dataSource === 'upload') {
+                 const formData = new FormData();
+                 formData.append('data_source', 'upload');
+                 formData.append('asset', asset);
+                 formData.append('timeframe', timeframe);
+                 formData.append('redirect_to_output', 'true');
+                 formData.append('market_file', uploadedFile);
+                 requestOptions = {
+                     method: 'POST',
+                     body: formData
+                 };
+             } else {
+                 const requestData = {
+                     data_source: dataSource,
+                     asset: asset,
+                     timeframe: timeframe,
+                     start_date: startDate,
+                     start_time: startTime,
+                     end_date: endDate,
+                     end_time: endTime,
+                     use_current_time: useCurrentTime,
+                     redirect_to_output: true
+                 };
+                 requestOptions = {
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json',
+                     },
+                     body: JSON.stringify(requestData)
+                 };
+             }
              
              // Make API call
-             fetch('/api/analyze', {
-                 method: 'POST',
-                 headers: {
-                     'Content-Type': 'application/json',
-                 },
-                 body: JSON.stringify(requestData)
-             })
+             fetch('/api/analyze', requestOptions)
              .then(response => response.json())
             .then(data => {
                 if (data.redirect) {

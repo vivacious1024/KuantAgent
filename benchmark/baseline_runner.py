@@ -37,12 +37,14 @@ class BaselineResult:
     future_horizon: int
     true_direction: str
     future_return_pct: float
+    final_direction_correct: int
     horizon_correct_count: int
     horizon_total_count: int
     horizon_step_accuracy: float
     future_step_directions: List[str]
     neutral_threshold_pct: float
     is_neutral_move: int
+    horizon_majority_correct: int
     correct: int
     justification: List[str]
 
@@ -93,9 +95,10 @@ def run_algorithmic_baseline(
     horizon_total_count = len(future_step_directions)
     horizon_step_accuracy = 0.0 if horizon_total_count == 0 else horizon_correct_count / horizon_total_count
     is_neutral_move = int(abs(future_return_pct) < neutral_threshold_pct)
-    correct = int(predicted_side == true_direction)
+    final_direction_correct = int(predicted_side == true_direction)
+    horizon_majority_correct = final_direction_correct
     if future_horizon > 1 and horizon_total_count > 0:
-        correct = int(horizon_correct_count >= ((horizon_total_count // 2) + 1))
+        horizon_majority_correct = int(horizon_correct_count >= ((horizon_total_count // 2) + 1))
 
     baseline_result = BaselineResult(
         asset=asset,
@@ -108,13 +111,15 @@ def run_algorithmic_baseline(
         future_horizon=future_horizon,
         true_direction=true_direction,
         future_return_pct=round(future_return_pct, 4),
+        final_direction_correct=final_direction_correct,
         horizon_correct_count=horizon_correct_count,
         horizon_total_count=horizon_total_count,
         horizon_step_accuracy=round(horizon_step_accuracy, 4),
         future_step_directions=future_step_directions,
         neutral_threshold_pct=neutral_threshold_pct,
         is_neutral_move=is_neutral_move,
-        correct=correct,
+        horizon_majority_correct=horizon_majority_correct,
+        correct=horizon_majority_correct,
         justification=list(decision_context.get("supporting_reasons", [])),
     )
 

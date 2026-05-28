@@ -34,6 +34,28 @@ def invoke_with_retry(call_fn, *args, retries=4, wait_sec=6):
     raise RuntimeError("Indicator agent exceeded maximum retries")
 
 
+def _build_fallback_indicator_report(indicator_features, time_frame):
+    """Return a deterministic fallback report when the LLM path is unavailable."""
+
+    rsi_state = indicator_features.get("rsi_state", "unknown")
+    macd_cross = indicator_features.get("macd_cross", "none")
+    macd_hist = indicator_features.get("macd_hist", 0.0)
+    roc_value = indicator_features.get("roc", 0.0)
+    stoch_state = indicator_features.get("stoch_state", "unknown")
+    willr_state = indicator_features.get("willr_state", "unknown")
+    momentum_bias = indicator_features.get("momentum_bias", "neutral")
+    divergence = indicator_features.get("rsi_divergence", "none")
+
+    return (
+        f"Fallback indicator analysis for {time_frame} data. "
+        f"Momentum bias={momentum_bias}; RSI state={rsi_state}; "
+        f"MACD cross={macd_cross}; MACD histogram={macd_hist}; ROC={roc_value}; "
+        f"Stochastic state={stoch_state}; Williams %R state={willr_state}; "
+        f"RSI divergence={divergence}. "
+        "The report was generated from deterministic indicator features because the indicator agent LLM path exceeded retries."
+    )
+
+
 def create_indicator_agent(llm, toolkit):
     """Create the indicator-analysis node used inside the LangGraph workflow."""
 
@@ -76,8 +98,16 @@ def create_indicator_agent(llm, toolkit):
         if not messages:
             messages = [HumanMessage(content="Begin indicator analysis.")]
 
-        ai_response = invoke_with_retry(chain.invoke, messages)
-        messages.append(ai_response)
+        try:
+            ai_response = invoke_with_retry(chain.invoke, messages)
+            messages.append(ai_response)
+        except Exception:
+            fallback_report = _build_fallback_indicator_report(indicator_features, time_frame)
+            messages.append(HumanMessage(content=fallback_report))
+            return {
+                "messages": messages,
+                "indicator_report": fallback_report,
+            }
 
         if hasattr(ai_response, "tool_calls") and ai_response.tool_calls:
             for call in ai_response.tool_calls:
@@ -99,8 +129,16 @@ def create_indicator_agent(llm, toolkit):
 
         while iteration < max_iterations:
             iteration += 1
-            final_response = invoke_with_retry(chain.invoke, messages)
-            messages.append(final_response)
+            try:
+                final_response = invoke_with_retry(chain.invoke, messages)
+                messages.append(final_response)
+            except Exception:
+                fallback_report = _build_fallback_indicator_report(indicator_features, time_frame)
+                messages.append(HumanMessage(content=fallback_report))
+                return {
+                    "messages": messages,
+                    "indicator_report": fallback_report,
+                }
 
             if not hasattr(final_response, "tool_calls") or not final_response.tool_calls:
                 break

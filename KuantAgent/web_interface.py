@@ -159,8 +159,25 @@ class WebTradingAnalyzer:
         files = list(asset_dir.glob(pattern))
         return sorted(files)
 
+    def load_uploaded_market_data(self, uploaded_file: Any) -> pd.DataFrame:
+        """Load user-uploaded CSV/XLSX market data into a DataFrame."""
+        filename = (getattr(uploaded_file, "filename", "") or "").strip()
+        if not filename:
+            raise ValueError("No uploaded file was provided.")
+
+        suffix = Path(filename).suffix.lower()
+        if suffix == ".csv":
+            return pd.read_csv(uploaded_file.stream)
+        if suffix in {".xlsx", ".xls"}:
+            return pd.read_excel(uploaded_file.stream)
+        raise ValueError("Unsupported file type. Please upload a CSV or Excel file.")
+
     def run_analysis(
-        self, df: pd.DataFrame, asset_name: str, timeframe: str
+        self,
+        df: pd.DataFrame,
+        asset_name: str,
+        timeframe: str,
+        source_label: str = "Yahoo Finance",
     ) -> Dict[str, Any]:
         """Run the trading analysis on the provided DataFrame."""
         try:
@@ -173,6 +190,7 @@ class WebTradingAnalyzer:
                 raw_df=df,
                 config=OHLCWindowConfig(window_size=45, keep_volume=False),
             )
+            normalized_df = prepared_market_data["normalized_df"]
             df_slice = prepared_market_data["window_df"]
             df_slice_dict = prepared_market_data["ohlc_dict"]
             macro_context = build_macro_context(df_slice, timeframe=timeframe) or {}
@@ -234,6 +252,16 @@ class WebTradingAnalyzer:
                 "asset_name": asset_name,
                 "timeframe": display_timeframe,
                 "data_length": len(df_slice),
+                "pipeline_summary": {
+                    "data_source": source_label,
+                    "raw_rows": int(len(df)),
+                    "normalized_rows": int(len(normalized_df)),
+                    "window_rows": int(len(df_slice)),
+                    "window_size": 45,
+                    "future_horizon": 1,
+                    "first_timestamp": str(df_slice["Datetime"].iloc[0]) if not df_slice.empty else "",
+                    "last_timestamp": str(df_slice["Datetime"].iloc[-1]) if not df_slice.empty else "",
+                },
             }
 
         except Exception as e:
@@ -250,7 +278,7 @@ class WebTradingAnalyzer:
             elif provider == "anthropic":
                 provider_name = "Anthropic"
             else:
-                provider_name = "Qwen"
+                provider_name = "SiliconFlow"
 
             # Check for specific API key authentication errors
             if (
@@ -343,6 +371,7 @@ class WebTradingAnalyzer:
             "asset_name": results["asset_name"],
             "timeframe": results["timeframe"],
             "data_length": results["data_length"],
+            "pipeline_summary": results.get("pipeline_summary", {}),
             "technical_indicators": technical_indicators,
             "pattern_analysis": pattern_analysis,
             "trend_analysis": trend_analysis,
@@ -460,7 +489,12 @@ class WebTradingAnalyzer:
                 
                 provider_name = "Anthropic"
             else:  # qwen
-                api_key = os.environ.get("SILICONFLOW_API_KEY", "")
+                api_key = (
+                    os.environ.get("SILICONFLOW_API_KEY", "")
+                    or self.config.get("qwen_api_key", "")
+                    or self.config.get("siliconflow_api_key", "")
+                    or self.config.get("mimo_api_key", "")
+                )
                 if not api_key:
                     return {
                         "valid": False,
@@ -491,7 +525,7 @@ class WebTradingAnalyzer:
             elif provider == "anthropic":
                 provider_name = "Anthropic"
             else:
-                provider_name = "Qwen"
+                provider_name = "SiliconFlow"
 
             if (
                 "authentication" in error_msg.lower()
@@ -609,62 +643,84 @@ def output():
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
     try:
-        data = request.get_json()
-        data_source = data.get("data_source")
-        asset = data.get("asset")
-        timeframe = data.get("timeframe")
-        redirect_to_output = data.get("redirect_to_output", False)
+        is_multipart = request.content_type and "multipart/form-data" in request.content_type
+        if is_multipart:
+            data_source = (request.form.get("data_source") or "upload").strip()
+            asset = (request.form.get("asset") or "CUSTOM").strip()
+            timeframe = (request.form.get("timeframe") or "1h").strip()
+            redirect_to_output = (request.form.get("redirect_to_output") or "true").lower() == "true"
+        else:
+            data = request.get_json() or {}
+            data_source = data.get("data_source")
+            asset = data.get("asset")
+            timeframe = data.get("timeframe")
+            redirect_to_output = data.get("redirect_to_output", False)
 
-        if data_source != "live":
-            return jsonify({"error": "Only live Yahoo Finance data is supported."})
+        display_name = analyzer.asset_mapping.get(asset, asset) or asset
 
-        # Live Yahoo Finance data only
-        start_date = data.get("start_date")
-        start_time = data.get("start_time", "00:00")
-        end_date = data.get("end_date")
-        end_time = data.get("end_time", "23:59")
-        use_current_time = data.get("use_current_time", False)
-
-        # Create datetime objects for validation
-        if start_date:
-            start_datetime_str = f"{start_date} {start_time}"
-            try:
-                start_dt = datetime.strptime(start_datetime_str, "%Y-%m-%d %H:%M")
-            except ValueError:
-                return jsonify({"error": "Invalid start date/time format."})
-
-            if start_dt > datetime.now():
-                return jsonify({"error": "Start date/time cannot be in the future."})
-
-        if end_date:
-            if use_current_time:
-                end_dt = datetime.now()
+        if data_source == "live":
+            if is_multipart:
+                start_date = request.form.get("start_date")
+                start_time = request.form.get("start_time", "00:00")
+                end_date = request.form.get("end_date")
+                end_time = request.form.get("end_time", "23:59")
+                use_current_time = (request.form.get("use_current_time") or "false").lower() == "true"
             else:
-                end_datetime_str = f"{end_date} {end_time}"
+                start_date = data.get("start_date")
+                start_time = data.get("start_time", "00:00")
+                end_date = data.get("end_date")
+                end_time = data.get("end_time", "23:59")
+                use_current_time = data.get("use_current_time", False)
+
+            if start_date:
+                start_datetime_str = f"{start_date} {start_time}"
                 try:
-                    end_dt = datetime.strptime(end_datetime_str, "%Y-%m-%d %H:%M")
+                    start_dt = datetime.strptime(start_datetime_str, "%Y-%m-%d %H:%M")
                 except ValueError:
-                    return jsonify({"error": "Invalid end date/time format."})
+                    return jsonify({"error": "Invalid start date/time format."})
 
-                if end_dt > datetime.now():
-                    return jsonify({"error": "End date/time cannot be in the future."})
+                if start_dt > datetime.now():
+                    return jsonify({"error": "Start date/time cannot be in the future."})
+            else:
+                return jsonify({"error": "Start date is required for live analysis."})
 
-            if start_date and start_dt and end_dt and end_dt < start_dt:
-                return jsonify(
-                    {"error": "End date/time cannot be earlier than start date/time."}
-                )
+            if end_date:
+                if use_current_time:
+                    end_dt = datetime.now()
+                else:
+                    end_datetime_str = f"{end_date} {end_time}"
+                    try:
+                        end_dt = datetime.strptime(end_datetime_str, "%Y-%m-%d %H:%M")
+                    except ValueError:
+                        return jsonify({"error": "Invalid end date/time format."})
 
-        # Fetch data with datetime objects
-        df = analyzer.fetch_yfinance_data_with_datetime(
-            asset, timeframe, start_dt, end_dt
-        )
-        if df.empty:
-            return jsonify({"error": "No data available for the specified parameters"})
+                    if end_dt > datetime.now():
+                        return jsonify({"error": "End date/time cannot be in the future."})
+                if end_dt < start_dt:
+                    return jsonify({"error": "End date/time cannot be earlier than start date/time."})
+            else:
+                return jsonify({"error": "End date is required for live analysis."})
 
-        display_name = analyzer.asset_mapping.get(asset, asset)
-        if display_name is None:
-            display_name = asset
-        results = analyzer.run_analysis(df, display_name, timeframe)
+            df = analyzer.fetch_yfinance_data_with_datetime(asset, timeframe, start_dt, end_dt)
+            if df.empty:
+                return jsonify({"error": "No data available for the specified parameters"})
+            results = analyzer.run_analysis(df, display_name, timeframe, source_label="Yahoo Finance live feed")
+
+        elif data_source == "upload":
+            uploaded_file = request.files.get("market_file")
+            if uploaded_file is None:
+                return jsonify({"error": "Please upload a CSV or Excel market data file."})
+            try:
+                df = analyzer.load_uploaded_market_data(uploaded_file)
+            except Exception as exc:
+                return jsonify({"error": str(exc)})
+            if df.empty:
+                return jsonify({"error": "The uploaded file did not contain any rows."})
+            source_label = f"Uploaded file: {uploaded_file.filename}"
+            results = analyzer.run_analysis(df, display_name, timeframe, source_label=source_label)
+        else:
+            return jsonify({"error": "Unsupported data source. Use live or upload."})
+
         formatted_results = analyzer.extract_analysis_results(results)
 
         # If redirect is requested, return redirect URL with results
@@ -827,17 +883,14 @@ def update_provider():
             if not analyzer.config["graph_llm_model"].startswith("claude"):
                 analyzer.config["graph_llm_model"] = "claude-haiku-4-5-20251001"
         elif provider == "qwen":
-            # Set default Qwen models if not already set to Qwen models
-            if not analyzer.config["agent_llm_model"].startswith("qwen"):
-                analyzer.config["agent_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
-            if not analyzer.config["graph_llm_model"].startswith("qwen"):
-                analyzer.config["graph_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
+            analyzer.config["agent_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
+            analyzer.config["graph_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
             
         else:
             # Set default OpenAI models if not already set to OpenAI models
-            if analyzer.config["agent_llm_model"].startswith(("claude", "qwen")):
+            if analyzer.config["agent_llm_model"].startswith(("claude", "qwen", "mimo-")):
                 analyzer.config["agent_llm_model"] = "gpt-4o-mini"
-            if analyzer.config["graph_llm_model"].startswith(("claude", "qwen")):
+            if analyzer.config["graph_llm_model"].startswith(("claude", "qwen", "mimo-")):
                 analyzer.config["graph_llm_model"] = "gpt-4o"
         
         analyzer.trading_graph.config.update(analyzer.config)
@@ -908,7 +961,11 @@ def get_api_key_status():
             if not api_key and hasattr(analyzer, 'config'):
                 api_key = analyzer.config.get("anthropic_api_key", "")
         elif provider == "qwen":
-            api_key = os.environ.get("SILICONFLOW_API_KEY", "")
+            api_key = (
+                os.environ.get("SILICONFLOW_API_KEY", "")
+                or (analyzer.config.get("qwen_api_key", "") if hasattr(analyzer, "config") else "")
+                or (analyzer.config.get("siliconflow_api_key", "") if hasattr(analyzer, "config") else "")
+            )
         else:
             api_key = ""
         
