@@ -864,23 +864,23 @@
 
          /* KuantAgent redesign overrides */
          :root {
-             --qa-paper: #f6f1e8;
+             --qa-paper: #fffaf2;
              --qa-panel: #fffdf8;
-             --qa-ink: #19324a;
-             --qa-ink-soft: #4f5f70;
-             --qa-line: #ddd2c2;
-             --qa-accent: #bf6a2d;
-             --qa-accent-soft: #ead8c8;
-             --qa-teal: #2c6f73;
-             --qa-gold: #c9a25a;
-             --qa-shadow: 0 24px 48px rgba(25, 50, 74, 0.08);
+             --qa-ink: #3d554b;
+             --qa-ink-soft: #728578;
+             --qa-line: #e7dcca;
+             --qa-accent: #8fb38f;
+             --qa-accent-soft: #edf4ea;
+             --qa-teal: #9dbf9f;
+             --qa-gold: #e4cfaa;
+             --qa-shadow: 0 22px 40px rgba(114, 133, 120, 0.10);
          }
 
          body {
              background:
-                 radial-gradient(circle at top left, rgba(201, 162, 90, 0.12), transparent 22%),
-                 radial-gradient(circle at top right, rgba(44, 111, 115, 0.08), transparent 18%),
-                 linear-gradient(180deg, #f9f6f0 0%, var(--qa-paper) 100%);
+                 radial-gradient(circle at top left, rgba(228, 207, 170, 0.18), transparent 22%),
+                 radial-gradient(circle at top right, rgba(157, 191, 159, 0.14), transparent 18%),
+                 linear-gradient(180deg, #fffdf8 0%, var(--qa-paper) 100%);
              color: var(--qa-ink);
          }
 
@@ -892,28 +892,31 @@
 
          .hero-section {
              background:
-                 linear-gradient(135deg, rgba(25, 50, 74, 0.97) 0%, rgba(34, 58, 84, 0.95) 58%, rgba(44, 111, 115, 0.92) 100%);
-             border-bottom: 1px solid rgba(221, 210, 194, 0.18);
+                 radial-gradient(circle at top right, rgba(157, 191, 159, 0.28), transparent 24%),
+                 radial-gradient(circle at left center, rgba(228, 207, 170, 0.32), transparent 26%),
+                 linear-gradient(180deg, #fffdf8 0%, #f7efdf 100%);
+             border-bottom: 1px solid rgba(231, 220, 202, 0.95);
          }
 
          .hero-section::before {
-             opacity: 0.18;
+             opacity: 0.22;
              background:
-                 linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px),
-                 linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
-             background-size: 26px 26px;
+                 linear-gradient(90deg, rgba(143,179,143,0.12) 1px, transparent 1px),
+                 linear-gradient(rgba(228,207,170,0.12) 1px, transparent 1px);
+             background-size: 28px 28px;
          }
 
          .hero-btn {
-             background: var(--qa-accent);
-             box-shadow: 0 16px 36px rgba(191, 106, 45, 0.25);
+             background: linear-gradient(135deg, #95b996 0%, #769c78 100%);
+             color: #fffdf8;
+             box-shadow: 0 16px 30px rgba(118, 156, 120, 0.26);
              border-radius: 18px;
              padding: 1rem 1.8rem;
          }
 
          .hero-btn:hover {
-             background: #a85d28;
-             box-shadow: 0 20px 40px rgba(191, 106, 45, 0.28);
+             background: linear-gradient(135deg, #86aa88 0%, #688b6a 100%);
+             box-shadow: 0 18px 34px rgba(118, 156, 120, 0.28);
          }
 
          .form-container {
@@ -1033,10 +1036,10 @@
          .asset-btn.active,
          .source-btn.active,
          .timeframe-btn.active {
-             background: linear-gradient(135deg, #c87233 0%, #a85d28 100%);
-             border-color: #a85d28;
-             color: #fffaf4;
-             box-shadow: 0 14px 28px rgba(191, 106, 45, 0.22);
+             background: linear-gradient(135deg, #9fc39f 0%, #7da27e 100%);
+             border-color: #7da27e;
+             color: #fffdf8;
+             box-shadow: 0 14px 28px rgba(125, 162, 126, 0.24);
          }
 
          .custom-asset-btn {
@@ -1059,13 +1062,13 @@
          }
 
          .btn-primary {
-             background: linear-gradient(135deg, var(--qa-ink) 0%, #244968 100%);
+             background: linear-gradient(135deg, #8fb38f 0%, #6f946f 100%);
              border-radius: 18px;
-             box-shadow: 0 18px 34px rgba(25, 50, 74, 0.18);
+             box-shadow: 0 18px 34px rgba(118, 156, 120, 0.20);
          }
 
          .btn-primary:hover {
-             background: linear-gradient(135deg, #14293f 0%, #1f415d 100%);
+             background: linear-gradient(135deg, #83a783 0%, #618863 100%);
          }
 
          .alert-info {
@@ -1087,38 +1090,80 @@
              padding: 1rem 1.1rem;
          }
 
-         .security-panel,
-         .action-panel {
-             background:
-                 linear-gradient(180deg, rgba(25, 50, 74, 0.98) 0%, rgba(33, 60, 87, 0.96) 100%);
-             color: #f3ede3;
-             border-color: rgba(255,255,255,0.08);
-         }
-
-         .security-panel::before,
-         .action-panel::before {
-             background: linear-gradient(180deg, var(--qa-gold) 0%, var(--qa-accent) 100%);
-         }
-
-         .security-panel .panel-title,
-         .action-panel .panel-title {
-             color: #fffaf2;
-             border-bottom-color: rgba(255,255,255,0.14);
-         }
-
-         .security-panel .panel-title i,
-         .action-panel .panel-title i {
-             color: var(--qa-gold);
-         }
-
-         .security-content p,
-         .security-content strong {
-             color: #f3ede3;
-         }
-
          .text-muted,
          .form-text {
              color: var(--qa-ink-soft) !important;
+         }
+
+         .legacy-provider-config {
+             display: none !important;
+         }
+
+         .hero-section .text-white,
+         .hero-section .h1,
+         .hero-section p,
+         .hero-section span {
+             color: var(--qa-ink) !important;
+         }
+
+         .hero-overview-grid {
+             display: grid;
+             grid-template-columns: repeat(3, minmax(0, 1fr));
+             gap: 1rem;
+             margin-top: 2rem;
+         }
+
+         .hero-overview-card {
+             background: rgba(255, 253, 248, 0.92);
+             border: 1px solid rgba(143, 179, 143, 0.24);
+             border-radius: 18px;
+             padding: 1rem 1.1rem;
+             text-align: left;
+             color: var(--qa-ink);
+             box-shadow: 0 10px 22px rgba(114, 133, 120, 0.08);
+         }
+
+         .architecture-showcase {
+             display: grid;
+             grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.95fr);
+             gap: 1.4rem;
+             align-items: center;
+         }
+
+         .architecture-frame {
+             background: #fffdf8;
+             border: 1px solid var(--qa-line);
+             border-radius: 22px;
+             padding: 1rem;
+             box-shadow: var(--qa-shadow);
+         }
+
+         .architecture-frame img {
+             width: 100%;
+             height: auto;
+             display: block;
+             border-radius: 16px;
+         }
+
+         .architecture-note {
+             background: linear-gradient(180deg, rgba(255,253,248,0.95) 0%, rgba(249,241,227,0.9) 100%);
+             border: 1px solid var(--qa-line);
+             border-radius: 22px;
+             padding: 1.4rem 1.45rem;
+         }
+
+         .architecture-note h5 {
+             margin-bottom: 0.85rem;
+             color: var(--qa-ink);
+             font-weight: 700;
+             font-size: 1.08rem;
+         }
+
+         .architecture-note ul {
+             margin: 0;
+             padding-left: 1.1rem;
+             color: var(--qa-ink-soft);
+             line-height: 1.8;
          }
 
          @media (max-width: 768px) {
@@ -1132,6 +1177,11 @@
 
              .panel {
                  border-radius: 18px;
+             }
+
+             .hero-overview-grid,
+             .architecture-showcase {
+                 grid-template-columns: 1fr;
              }
          }
     </style>
@@ -1816,7 +1866,83 @@
                 document.getElementById('llmProviderSelect').value = savedProvider;
                 handleProviderChange();
             }
+
+            personalizeKuantAgentUI();
         });
+
+        function personalizeKuantAgentUI() {
+            const heroTitle = document.querySelector('.title-highlight');
+            if (heroTitle) {
+                heroTitle.textContent = '智能量化分析工作台';
+            }
+
+            const heroBrand = document.querySelector('span[style*="font-size: 4.0rem"]');
+            if (heroBrand) {
+                heroBrand.style.color = '#3d554b';
+            }
+
+            const heroSummary = document.querySelector('.hero-section p.text-lg');
+            if (heroSummary) {
+                heroSummary.textContent = '面向短周期交易研究的中文分析界面，围绕数据处理层、算法分析层与智能决策层组织完整链路，用于展示从市场数据接入、OHLC 标准化、结构化证据提取到多智能体裁决输出的全过程。';
+            }
+
+            const heroButton = document.querySelector('.hero-btn-text');
+            if (heroButton) {
+                heroButton.textContent = '进入分析界面';
+            }
+
+            const overviewCards = document.querySelectorAll('.hero-section [style*="grid-template-columns: repeat(3, minmax(0, 1fr))"] > div');
+            const overviewContent = [
+                ['数据处理层', '统一接入实时行情或本地文件，完成字段标准化、窗口截取与 OHLC 封装。'],
+                ['算法分析层', '提取指标、形态、趋势、风险与决策特征，并生成可验证的结构化中间证据。'],
+                ['智能决策层', '由四个核心 Agent 分工解释，再由 Decision Agent 完成最终校准与建议输出。']
+            ];
+            overviewCards.forEach((card, index) => {
+                card.className = 'hero-overview-card';
+                card.style.background = '';
+                card.style.border = '';
+                card.style.color = '';
+                card.innerHTML = `
+                    <div style="font-size: 1rem; font-weight: 700; margin-bottom: 0.45rem;">${overviewContent[index][0]}</div>
+                    <div style="font-size: 0.95rem; line-height: 1.6;">${overviewContent[index][1]}</div>
+                `;
+            });
+            const overviewGrid = document.querySelector('.hero-section [style*="grid-template-columns: repeat(3, minmax(0, 1fr))"]');
+            if (overviewGrid) {
+                overviewGrid.className = 'hero-overview-grid';
+                overviewGrid.removeAttribute('style');
+            }
+
+            const panelGroups = document.querySelectorAll('.form-section > .panel-group');
+            const legacyConfigGroup = panelGroups[2];
+            if (legacyConfigGroup) {
+                legacyConfigGroup.classList.add('legacy-provider-config');
+                const showcase = document.createElement('div');
+                showcase.className = 'panel-group';
+                showcase.innerHTML = `
+                    <div class="panel" style="width:100%;">
+                        <h4 class="panel-title">
+                            <i class="fas fa-sitemap"></i> KuantAgent 架构总览
+                        </h4>
+                        <div class="architecture-showcase">
+                            <div class="architecture-frame">
+                                <img src="assets/kuantagent-architecture.png" alt="KuantAgent 架构图">
+                            </div>
+                            <div class="architecture-note">
+                                <h5>界面与模型链路对应关系</h5>
+                                <ul>
+                                    <li>实时行情或本地文件首先进入数据处理层，完成标准化与固定窗口构造。</li>
+                                    <li>算法分析层从统一 OHLC 窗口中提取指标、形态、趋势、风险与决策特征。</li>
+                                    <li>智能决策层由四个核心 Agent 分工解释，再由 Decision Agent 完成最终裁决。</li>
+                                    <li>结果页会同步展示中间特征、各 Agent 报告与最终交易建议，便于演示可解释性。</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                legacyConfigGroup.insertAdjacentElement('afterend', showcase);
+            }
+        }
         
         function checkApiKeyStatus() {
             const provider = document.getElementById('llmProviderSelect')?.value || 'mimo';

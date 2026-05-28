@@ -555,22 +555,22 @@
 
         /* KuantAgent report redesign overrides */
         :root {
-            --qa-paper: #f6f1e8;
+            --qa-paper: #fffaf2;
             --qa-panel: #fffdf8;
-            --qa-ink: #19324a;
-            --qa-ink-soft: #566578;
-            --qa-line: #ddd2c2;
-            --qa-accent: #bf6a2d;
-            --qa-teal: #2c6f73;
-            --qa-gold: #c9a25a;
-            --qa-shadow: 0 24px 48px rgba(25, 50, 74, 0.08);
+            --qa-ink: #3d554b;
+            --qa-ink-soft: #728578;
+            --qa-line: #e7dcca;
+            --qa-accent: #8fb38f;
+            --qa-teal: #9dbf9f;
+            --qa-gold: #e4cfaa;
+            --qa-shadow: 0 22px 40px rgba(114, 133, 120, 0.10);
         }
 
         body {
             background:
-                radial-gradient(circle at top left, rgba(201, 162, 90, 0.12), transparent 20%),
-                radial-gradient(circle at top right, rgba(44, 111, 115, 0.08), transparent 18%),
-                linear-gradient(180deg, #f8f4ec 0%, var(--qa-paper) 100%);
+                radial-gradient(circle at top left, rgba(228, 207, 170, 0.18), transparent 20%),
+                radial-gradient(circle at top right, rgba(157, 191, 159, 0.14), transparent 18%),
+                linear-gradient(180deg, #fffdf8 0%, var(--qa-paper) 100%);
             color: var(--qa-ink);
         }
 
@@ -582,16 +582,19 @@
 
         .header {
             background:
-                linear-gradient(135deg, rgba(25, 50, 74, 0.97) 0%, rgba(33, 60, 87, 0.95) 60%, rgba(44, 111, 115, 0.9) 100%);
+                radial-gradient(circle at top right, rgba(157, 191, 159, 0.25), transparent 24%),
+                radial-gradient(circle at left center, rgba(228, 207, 170, 0.26), transparent 22%),
+                linear-gradient(180deg, #fffdf8 0%, #f6eddc 100%);
             border-radius: 28px;
-            box-shadow: 0 30px 56px rgba(25, 50, 74, 0.18);
+            box-shadow: 0 22px 48px rgba(114, 133, 120, 0.12);
+            color: var(--qa-ink);
         }
 
         .header::before {
-            opacity: 0.18;
+            opacity: 0.20;
             background:
-                linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px),
-                linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
+                linear-gradient(90deg, rgba(143,179,143,0.12) 1px, transparent 1px),
+                linear-gradient(rgba(228,207,170,0.12) 1px, transparent 1px);
             background-size: 26px 26px;
         }
 
@@ -1026,6 +1029,15 @@
                     sessionStorage.removeItem('analysisResults');
                 } catch (e) {
                     console.error('Error parsing sessionStorage results:', e);
+                }
+            }
+
+            const dataPipelinePanel = document.querySelector('.panel-title .fa-filter');
+            if (dataPipelinePanel) {
+                const panel = dataPipelinePanel.closest('.panel');
+                const note = panel ? panel.querySelector('.section-note') : null;
+                if (note) {
+                    note.textContent = '该部分对应 KuantAgent 的数据处理层。完整原始数据先用于清洗、标准化与窗口筛选，随后系统仅截取最近 45 行固定分析窗口送入主模型，因此原始行数可能远大于最终分析窗口。';
                 }
             }
         });
