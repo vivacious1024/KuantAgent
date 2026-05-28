@@ -27,7 +27,7 @@ class WebTradingAnalyzer:
     def __init__(self):
         """Initialize the web trading analyzer."""
         from default_config import DEFAULT_CONFIG
-        # Start with default config (OpenAI)
+        # Start with the benchmark-aligned default config (Mimo)
         self.config = DEFAULT_CONFIG.copy()
         self.trading_graph = TradingGraph(config=self.config)
         self.data_dir = Path("data")
@@ -272,11 +272,13 @@ class WebTradingAnalyzer:
             traceback.print_exc()
             
             # Get current provider from config
-            provider = self.config.get("agent_llm_provider", "openai")
+            provider = self.config.get("agent_llm_provider", "mimo")
             if provider == "openai":
                 provider_name = "OpenAI"
             elif provider == "anthropic":
                 provider_name = "Anthropic"
+            elif provider == "mimo":
+                provider_name = "Mimo"
             else:
                 provider_name = "SiliconFlow"
 
@@ -539,7 +541,7 @@ class WebTradingAnalyzer:
         try:
             # Get provider from config if not provided
             if provider is None:
-                provider = self.config.get("agent_llm_provider", "openai")
+                provider = self.config.get("agent_llm_provider", "mimo")
             
             if provider == "openai":
                 from openai import OpenAI
@@ -572,12 +574,30 @@ class WebTradingAnalyzer:
                 )
                 
                 provider_name = "Anthropic"
+            elif provider == "mimo":
+                api_key = os.environ.get("MIMO_API_KEY", "") or self.config.get("mimo_api_key", "")
+                if not api_key:
+                    return {
+                        "valid": False,
+                        "error": "鉂?Invalid API Key: The Mimo API key is not set. Please update it in the Settings section.",
+                    }
+
+                client = OpenAI(
+                    api_key=api_key,
+                    base_url="https://token-plan-cn.xiaomimimo.com/v1",
+                )
+                _ = client.chat.completions.create(
+                    model="mimo-v2.5-pro",
+                    messages=[{"role": "user", "content": "Hello"}],
+                    max_tokens=5,
+                )
+
+                provider_name = "Mimo"
             else:  # qwen
                 api_key = (
                     os.environ.get("SILICONFLOW_API_KEY", "")
                     or self.config.get("qwen_api_key", "")
                     or self.config.get("siliconflow_api_key", "")
-                    or self.config.get("mimo_api_key", "")
                 )
                 if not api_key:
                     return {
@@ -603,11 +623,13 @@ class WebTradingAnalyzer:
             
             # Determine provider name for error messages
             if provider is None:
-                provider = self.config.get("agent_llm_provider", "openai")
+                provider = self.config.get("agent_llm_provider", "mimo")
             if provider == "openai":
                 provider_name = "OpenAI"
             elif provider == "anthropic":
                 provider_name = "Anthropic"
+            elif provider == "mimo":
+                provider_name = "Mimo"
             else:
                 provider_name = "SiliconFlow"
 
@@ -959,18 +981,20 @@ def update_provider():
     """API endpoint to update LLM provider."""
     try:
         data = request.get_json()
-        provider = data.get("provider", "openai")
+        provider = data.get("provider", "mimo")
 
-        if provider not in ["openai", "anthropic", "qwen"]:
-            return jsonify({"error": "Provider must be 'openai', 'anthropic', or 'qwen'"})
+        if provider not in ["openai", "anthropic", "qwen", "mimo"]:
+            return jsonify({"error": "Provider must be 'openai', 'anthropic', 'qwen', or 'mimo'"})
 
         print(f"Updating provider to: {provider}")
 
         # Update config in both analyzer and trading_graph
         analyzer.config["agent_llm_provider"] = provider
         analyzer.config["graph_llm_provider"] = provider
+        analyzer.config["vision_llm_provider"] = provider
         analyzer.trading_graph.config["agent_llm_provider"] = provider
         analyzer.trading_graph.config["graph_llm_provider"] = provider
+        analyzer.trading_graph.config["vision_llm_provider"] = provider
         
         # Update model names if switching providers
         if provider == "anthropic":
@@ -982,13 +1006,23 @@ def update_provider():
         elif provider == "qwen":
             analyzer.config["agent_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
             analyzer.config["graph_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
-            
+            analyzer.config["vision_llm_model"] = "Qwen/Qwen3-Omni-30B-A3B-Thinking"
+            analyzer.config["qwen_base_url"] = "https://api.siliconflow.cn/v1"
+            analyzer.config["qwen_api_env_name"] = "SILICONFLOW_API_KEY"
+        elif provider == "mimo":
+            analyzer.config["agent_llm_model"] = "mimo-v2.5-pro"
+            analyzer.config["graph_llm_model"] = "mimo-v2.5-pro"
+            analyzer.config["vision_llm_model"] = "mimo-v2.5-pro"
+            analyzer.config["qwen_base_url"] = "https://token-plan-cn.xiaomimimo.com/v1"
+            analyzer.config["qwen_api_env_name"] = "MIMO_API_KEY"
         else:
             # Set default OpenAI models if not already set to OpenAI models
             if analyzer.config["agent_llm_model"].startswith(("claude", "qwen", "mimo-")):
                 analyzer.config["agent_llm_model"] = "gpt-4o-mini"
             if analyzer.config["graph_llm_model"].startswith(("claude", "qwen", "mimo-")):
                 analyzer.config["graph_llm_model"] = "gpt-4o"
+            if analyzer.config["vision_llm_model"].startswith(("claude", "qwen", "mimo-")):
+                analyzer.config["vision_llm_model"] = "gpt-4o"
         
         analyzer.trading_graph.config.update(analyzer.config)
 
@@ -1011,23 +1045,30 @@ def update_api_key():
     try:
         data = request.get_json()
         new_api_key = data.get("api_key")
-        provider = data.get("provider", "openai")  # Default to "openai" for backward compatibility
+        provider = data.get("provider", "mimo")
 
         if not new_api_key:
             return jsonify({"error": "API key is required"})
 
-        if provider not in ["openai", "anthropic", "qwen"]:
-            return jsonify({"error": "Provider must be 'openai', 'anthropic', or 'qwen'"})
+        if provider not in ["openai", "anthropic", "qwen", "mimo"]:
+            return jsonify({"error": "Provider must be 'openai', 'anthropic', 'qwen', or 'mimo'"})
 
         print(f"Updating {provider} API key to: {new_api_key[:8]}...{new_api_key[-4:]}")
 
         # Update the environment variable
         if provider == "openai":
             os.environ["OPENAI_API_KEY"] = new_api_key
+            analyzer.config["api_key"] = new_api_key
         elif provider == "anthropic":
             os.environ["ANTHROPIC_API_KEY"] = new_api_key
+            analyzer.config["anthropic_api_key"] = new_api_key
         elif provider == "qwen":
             os.environ["SILICONFLOW_API_KEY"] = new_api_key
+            analyzer.config["qwen_api_key"] = new_api_key
+            analyzer.config["siliconflow_api_key"] = new_api_key
+        elif provider == "mimo":
+            os.environ["MIMO_API_KEY"] = new_api_key
+            analyzer.config["mimo_api_key"] = new_api_key
 
         # Update the API key in the trading graph
         analyzer.trading_graph.update_api_key(new_api_key, provider=provider)
@@ -1044,7 +1085,7 @@ def update_api_key():
 def get_api_key_status():
     """API endpoint to check if API key is set for a provider."""
     try:
-        provider = request.args.get("provider", "openai")
+        provider = request.args.get("provider", "mimo")
         
         # First check environment variables
         if provider == "openai":
@@ -1062,6 +1103,11 @@ def get_api_key_status():
                 os.environ.get("SILICONFLOW_API_KEY", "")
                 or (analyzer.config.get("qwen_api_key", "") if hasattr(analyzer, "config") else "")
                 or (analyzer.config.get("siliconflow_api_key", "") if hasattr(analyzer, "config") else "")
+            )
+        elif provider == "mimo":
+            api_key = (
+                os.environ.get("MIMO_API_KEY", "")
+                or (analyzer.config.get("mimo_api_key", "") if hasattr(analyzer, "config") else "")
             )
         else:
             api_key = ""
@@ -1110,7 +1156,7 @@ def validate_api_key():
     """API endpoint to validate the current API key."""
     try:
         data = request.get_json() or {}
-        provider = data.get("provider") or analyzer.config.get("agent_llm_provider", "openai")
+        provider = data.get("provider") or analyzer.config.get("agent_llm_provider", "mimo")
         validation = analyzer.validate_api_key(provider=provider)
         return jsonify(validation)
     except Exception as e:

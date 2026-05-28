@@ -1126,14 +1126,26 @@
                                 <div class="form-group">
                                     <label class="form-label">大语言模型提供方</label>
                                     <select class="form-control" id="llmProviderSelect" onchange="handleProviderChange()">
-                                        <option value="openai" selected>OpenAI</option>
-                                        <option value="anthropic">Claude (Anthropic)</option>
-                                        <option value="qwen">Qwen</option>
+                                        <option value="mimo" selected>Mimo（与 benchmark 一致）</option>
+                                        <option value="qwen">Qwen（SiliconFlow）</option>
+                                        <option value="openai">OpenAI</option>
+                                        <option value="anthropic">Claude（Anthropic）</option>
                                     </select>
+                                </div>
+
+                                <!-- Mimo API Key Input -->
+                                <div class="form-group" id="mimoApiKeyGroup">
+                                    <label class="form-label">Mimo 密钥</label>
+                                    <div class="input-group">
+                                        <input type="password" class="form-control" id="mimoApiKeyInput" placeholder="输入 Mimo API Key">
+                                        <button class="btn btn-outline-primary" type="button" onclick="updateApiKey('mimo')">
+                                            <i class="fas fa-save"></i> 更新
+                                        </button>
+                                    </div>
                                 </div>
                                 
                                 <!-- OpenAI API Key Input -->
-                                <div class="form-group" id="openaiApiKeyGroup">
+                                <div class="form-group" id="openaiApiKeyGroup" style="display: none;">
                                     <label class="form-label">OpenAI 密钥</label>
                                     <div class="input-group">
                                         <input type="password" class="form-control" id="openaiApiKeyInput" placeholder="输入 OpenAI API Key">
@@ -1526,7 +1538,7 @@
             }
             
             // Set initial provider dropdown state
-            const savedProvider = localStorage.getItem('quantagent_provider') || 'openai';
+            const savedProvider = localStorage.getItem('quantagent_provider') || 'mimo';
             if (savedProvider) {
                 document.getElementById('llmProviderSelect').value = savedProvider;
                 handleProviderChange();
@@ -1534,7 +1546,7 @@
         });
         
         function checkApiKeyStatus() {
-            const provider = document.getElementById('llmProviderSelect')?.value || 'openai';
+            const provider = document.getElementById('llmProviderSelect')?.value || 'mimo';
             fetch(`/api/get-api-key-status?provider=${provider}`)
                 .then(response => {
                     if (!response.ok) {
@@ -1544,6 +1556,7 @@
                 })
                 .then(data => {
                     const providerNames = {
+                        'mimo': 'Mimo',
                         'openai': 'OpenAI',
                         'anthropic': 'Anthropic',
                         'qwen': 'Qwen'
@@ -1872,17 +1885,21 @@
          // Provider and API Key Management Functions
          function handleProviderChange() {
              const provider = document.getElementById('llmProviderSelect').value;
+             const mimoGroup = document.getElementById('mimoApiKeyGroup');
              const openaiGroup = document.getElementById('openaiApiKeyGroup');
              const anthropicGroup = document.getElementById('anthropicApiKeyGroup');
              const qwenGroup = document.getElementById('qwenApiKeyGroup');
              
              // Hide all groups first
+             mimoGroup.style.display = 'none';
              openaiGroup.style.display = 'none';
              anthropicGroup.style.display = 'none';
              qwenGroup.style.display = 'none';
              
              // Show the selected provider's group
-             if (provider === 'openai') {
+             if (provider === 'mimo') {
+                 mimoGroup.style.display = 'block';
+             } else if (provider === 'openai') {
                  openaiGroup.style.display = 'block';
              } else if (provider === 'anthropic') {
                  anthropicGroup.style.display = 'block';
@@ -1926,7 +1943,9 @@
              const actualProvider = provider || providerSelect.value;
              
              let apiKey;
-             if (actualProvider === 'openai') {
+             if (actualProvider === 'mimo') {
+                 apiKey = document.getElementById('mimoApiKeyInput').value.trim();
+             } else if (actualProvider === 'openai') {
                  apiKey = document.getElementById('openaiApiKeyInput').value.trim();
              } else if (actualProvider === 'anthropic') {
                  apiKey = document.getElementById('anthropicApiKeyInput').value.trim();
@@ -1963,12 +1982,15 @@
              .then(data => {
                  if (data.success) {
                      const providerNames = {
+                         'mimo': 'Mimo',
                          'openai': 'OpenAI',
                          'anthropic': 'Anthropic',
                          'qwen': 'Qwen'
                      };
                     showApiKeySuccess(`${providerNames[actualProvider] || actualProvider} API Key 更新成功。`);
-                     if (actualProvider === 'openai') {
+                     if (actualProvider === 'mimo') {
+                         document.getElementById('mimoApiKeyInput').value = '';
+                     } else if (actualProvider === 'openai') {
                          document.getElementById('openaiApiKeyInput').value = '';
                      } else if (actualProvider === 'anthropic') {
                          document.getElementById('anthropicApiKeyInput').value = '';
