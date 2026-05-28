@@ -83,12 +83,55 @@ class TradingGraph:
     def _get_qwen_base_url(self) -> str:
         return str(self.config.get("qwen_base_url", "") or "").strip() or "https://api.siliconflow.cn/v1"
 
+    def _get_openai_compatible_api_key(self, provider: str) -> str:
+        """Resolve API keys for OpenAI-compatible providers such as Qwen and Mimo."""
+        if provider == "mimo":
+            api_key = self.config.get("mimo_api_key")
+            preferred_env = self._get_qwen_api_env_name()
+            if not api_key and preferred_env:
+                api_key = os.environ.get(preferred_env) or _read_persistent_windows_env(preferred_env)
+            if not api_key:
+                api_key = (
+                    os.environ.get("MIMO_API_KEY")
+                    or _read_persistent_windows_env("MIMO_API_KEY")
+                    or self.config.get("qwen_api_key")
+                    or self.config.get("siliconflow_api_key")
+                    or os.environ.get("SILICONFLOW_API_KEY")
+                    or _read_persistent_windows_env("SILICONFLOW_API_KEY")
+                )
+            if not api_key:
+                raise ValueError(
+                    "Mimo API key not found. Please set environment variable "
+                    "'MIMO_API_KEY' before starting the app."
+                )
+            return api_key
+
+        api_key = self.config.get("qwen_api_key")
+        preferred_env = self._get_qwen_api_env_name()
+        if not api_key and preferred_env:
+            api_key = os.environ.get(preferred_env) or _read_persistent_windows_env(preferred_env)
+        if not api_key:
+            api_key = (
+                self.config.get("siliconflow_api_key")
+                or os.environ.get("SILICONFLOW_API_KEY")
+                or _read_persistent_windows_env("SILICONFLOW_API_KEY")
+                or self.config.get("mimo_api_key")
+                or os.environ.get("MIMO_API_KEY")
+                or _read_persistent_windows_env("MIMO_API_KEY")
+            )
+        if not api_key:
+            raise ValueError(
+                "SiliconFlow API key not found. Please set environment variable "
+                "'SILICONFLOW_API_KEY' before starting the app."
+            )
+        return api_key
+
     def _get_api_key(self, provider: str = "openai") -> str:
         """
         Get API key with proper validation and error handling.
         
         Args:
-            provider: The provider name ("openai", "anthropic", or "qwen")
+            provider: The provider name ("openai", "anthropic", "qwen", or "mimo")
         
         Returns:
             str: The API key for the specified provider
@@ -139,36 +182,22 @@ class TradingGraph:
                     "Please provide your actual Anthropic API key. "
                     "You can get one from: https://console.anthropic.com/"
                 )
-        elif provider == "qwen":
-            # Keep the qwen provider label for compatibility, but route the
-            # actual calls through SiliconFlow.
-            api_key = self.config.get("qwen_api_key")
-            preferred_env = self._get_qwen_api_env_name()
-            if not api_key and preferred_env:
-                api_key = os.environ.get(preferred_env) or _read_persistent_windows_env(preferred_env)
-            if not api_key:
-                api_key = (
-                    self.config.get("siliconflow_api_key")
-                    or os.environ.get("SILICONFLOW_API_KEY")
-                    or _read_persistent_windows_env("SILICONFLOW_API_KEY")
-                    or self.config.get("mimo_api_key")
-                    or os.environ.get("MIMO_API_KEY")
-                    or _read_persistent_windows_env("MIMO_API_KEY")
-                )
-            
-            if not api_key:
-                raise ValueError(
-                    "SiliconFlow API key not found. Please set environment variable "
-                    "'SILICONFLOW_API_KEY' before starting the app."
-                )
-            
+        elif provider in {"qwen", "mimo"}:
+            api_key = self._get_openai_compatible_api_key(provider)
             if api_key == "":
+                if provider == "mimo":
+                    raise ValueError(
+                        "Please provide your actual Mimo API key. "
+                        "You can get one from the Mimo platform."
+                    )
                 raise ValueError(
                     "Please provide your actual SiliconFlow API key. "
                     "You can get one from: https://api.siliconflow.cn/"
                 )
         else:
-            raise ValueError(f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', or 'qwen'")
+            raise ValueError(
+                f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', 'qwen', or 'mimo'"
+            )
         
         return api_key
 
@@ -179,7 +208,7 @@ class TradingGraph:
         Create an LLM instance based on the provider.
         
         Args:
-            provider: The provider name ("openai", "anthropic", or "qwen")
+            provider: The provider name ("openai", "anthropic", "qwen", or "mimo")
             model: The model name (e.g., "gpt-4o", "claude-3-5-sonnet-20241022", "qwen-vl-max-latest")
             temperature: The temperature setting for the model
             
@@ -207,7 +236,7 @@ class TradingGraph:
                 temperature=temperature,
                 api_key=api_key,
             )
-        elif provider == "qwen":
+        elif provider in {"qwen", "mimo"}:
             from langchain_openai import ChatOpenAI
 
             return ChatOpenAI(
@@ -218,7 +247,9 @@ class TradingGraph:
                 max_retries=4,
             )
         else:
-            raise ValueError(f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', or 'qwen'")
+            raise ValueError(
+                f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', 'qwen', or 'mimo'"
+            )
 
     # def _set_tool_nodes(self) -> Dict[str, ToolNode]:
     #     """
@@ -277,7 +308,7 @@ class TradingGraph:
         
         Args:
             api_key (str): The new API key
-            provider (str): The provider name ("openai" or "anthropic"), defaults to "openai"
+            provider (str): The provider name ("openai", "anthropic", "qwen", or "mimo"), defaults to "openai"
         """
         if provider == "openai":
             # Update the config with the new API key
@@ -299,8 +330,19 @@ class TradingGraph:
                 self.config["siliconflow_api_key"] = api_key
             if preferred_env == "MIMO_API_KEY":
                 self.config["mimo_api_key"] = api_key
+        elif provider == "mimo":
+            self.config["mimo_api_key"] = api_key
+            preferred_env = self._get_qwen_api_env_name() or "MIMO_API_KEY"
+            os.environ[preferred_env] = api_key
+            if preferred_env == "MIMO_API_KEY":
+                self.config["mimo_api_key"] = api_key
+            if preferred_env == "SILICONFLOW_API_KEY":
+                self.config["qwen_api_key"] = api_key
+                self.config["siliconflow_api_key"] = api_key
         else:
-            raise ValueError(f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', or 'qwen'")
+            raise ValueError(
+                f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', 'qwen', or 'mimo'"
+            )
         
         # Refresh the LLMs with the new API key
         self.refresh_llms()
