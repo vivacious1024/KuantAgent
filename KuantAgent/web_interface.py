@@ -316,6 +316,13 @@ class WebTradingAnalyzer:
 
         final_state = results["final_state"]
 
+        indicator_features = final_state.get("indicator_features", {}) or {}
+        pattern_features = final_state.get("pattern_features", {}) or {}
+        trend_features = final_state.get("trend_features", {}) or {}
+        risk_features = final_state.get("risk_features", {}) or {}
+        decision_features = final_state.get("decision_features", {}) or {}
+        case_context = final_state.get("case_context", {}) or {}
+
         # Extract analysis results from state fields
         technical_indicators = final_state.get("indicator_report", "")
         pattern_analysis = final_state.get("pattern_report", "")
@@ -340,6 +347,7 @@ class WebTradingAnalyzer:
                     decision_data = json.loads(json_str)
                     final_decision = {
                         "decision": decision_data.get("decision", "N/A"),
+                        "confidence": decision_data.get("confidence", "N/A"),
                         "risk_reward_ratio": decision_data.get(
                             "risk_reward_ratio", "N/A"
                         ),
@@ -358,6 +366,11 @@ class WebTradingAnalyzer:
                         "calibration_applied": decision_data.get("calibration_applied", "N/A"),
                         "hard_case_score": decision_data.get("hard_case_score", "N/A"),
                         "execution_grade": decision_data.get("execution_grade", "N/A"),
+                        "execution_advice": decision_data.get("execution_advice", "N/A"),
+                        "signal_quality": decision_data.get("signal_quality", "N/A"),
+                        "base_decision": decision_data.get("base_decision", "N/A"),
+                        "base_confidence": decision_data.get("base_confidence", "N/A"),
+                        "ai_action": decision_data.get("ai_action", "N/A"),
                     }
                 else:
                     # If no JSON found, return the raw text
@@ -365,6 +378,70 @@ class WebTradingAnalyzer:
             except json.JSONDecodeError:
                 # If JSON parsing fails, return the raw text
                 final_decision = {"raw": final_decision_raw}
+
+        def _json_block(payload: Dict[str, Any]) -> str:
+            if not payload:
+                return ""
+            try:
+                return json.dumps(payload, ensure_ascii=False, indent=2)
+            except Exception:
+                return str(payload)
+
+        def _with_cn_labels(payload: Dict[str, Any]) -> Dict[str, Any]:
+            if not isinstance(payload, dict):
+                return payload
+            decision_map = {"LONG": "多头", "SHORT": "空头", "NEUTRAL": "中性", "NONE": "无"}
+            advice_map = {"execute": "执行", "cautious": "谨慎执行", "skip": "暂不执行", "N/A": "N/A"}
+            action_map = {"follow": "跟随基线", "reduce_confidence": "降低置信度", "override": "方向覆写", "N/A": "N/A"}
+            quality_map = {"high": "高", "medium": "中", "low": "低", "N/A": "N/A"}
+            payload = payload.copy()
+            payload["decision_label"] = decision_map.get(str(payload.get("decision", "N/A")).upper(), str(payload.get("decision", "N/A")))
+            payload["base_decision_label"] = decision_map.get(str(payload.get("base_decision", "N/A")).upper(), str(payload.get("base_decision", "N/A")))
+            payload["execution_advice_label"] = advice_map.get(str(payload.get("execution_advice", "N/A")).lower(), str(payload.get("execution_advice", "N/A")))
+            payload["ai_action_label"] = action_map.get(str(payload.get("ai_action", "N/A")).lower(), str(payload.get("ai_action", "N/A")))
+            payload["signal_quality_label"] = quality_map.get(str(payload.get("signal_quality", "N/A")).lower(), str(payload.get("signal_quality", "N/A")))
+            return payload
+
+        def _build_human_advice(decision: Dict[str, Any], asset_name: str, timeframe: str) -> Dict[str, str]:
+            side = str(decision.get("decision", "N/A")).upper()
+            execution_advice = str(decision.get("execution_advice", "N/A")).lower()
+            confidence = decision.get("confidence", "N/A")
+            risk_reward = decision.get("risk_reward_ratio", "N/A")
+
+            if side == "LONG":
+                stance = "当前结论偏向多头，可优先关注顺势做多机会。"
+            elif side == "SHORT":
+                stance = "当前结论偏向空头，应优先防范回落或下破风险。"
+            else:
+                stance = "当前样本未形成足够稳定的方向优势，应以观察为主。"
+
+            if execution_advice == "execute":
+                action = "系统认为信号质量相对完整，若配合个人交易纪律，可考虑执行。"
+            elif execution_advice == "cautious":
+                action = "系统建议谨慎执行，更适合作为辅助判断信号，需结合位置与风险控制二次确认。"
+            elif execution_advice == "skip":
+                action = "系统建议暂不执行，当前更适合等待结构进一步明确。"
+            else:
+                action = "系统未给出明确执行级别，建议以保守观察和小仓位试探为主。"
+
+            summary = (
+                f"本次 {asset_name} {timeframe} 分析的综合结论为 {side}，"
+                f"置信度 {confidence}，风险收益比参考 {risk_reward}。"
+            )
+            return {
+                "summary": summary,
+                "stance": stance,
+                "action": action,
+            }
+
+        if isinstance(final_decision, dict):
+            final_decision = _with_cn_labels(final_decision)
+
+        human_advice = _build_human_advice(
+            final_decision if isinstance(final_decision, dict) else {},
+            results["asset_name"],
+            results["timeframe"],
+        )
 
         return {
             "success": True,
@@ -380,6 +457,13 @@ class WebTradingAnalyzer:
             "pattern_image_filename": pattern_image_filename,
             "trend_image_filename": trend_image_filename,
             "final_decision": final_decision,
+            "indicator_features_json": _json_block(indicator_features),
+            "pattern_features_json": _json_block(pattern_features),
+            "trend_features_json": _json_block(trend_features),
+            "risk_features_json": _json_block(risk_features),
+            "decision_features_json": _json_block(decision_features),
+            "case_context_json": _json_block(case_context),
+            "human_advice": human_advice,
         }
 
     def get_timeframe_date_limits(self, timeframe: str) -> Dict[str, Any]:
@@ -631,9 +715,22 @@ def output():
         "trend_image_filename": "",
         "final_decision": {
             "decision": "LONG",
+            "confidence": 0.62,
             "risk_reward_ratio": "1:2.5",
             "forecast_horizon": "24-48 hours",
             "justification": "Based on comprehensive analysis of technical indicators, pattern recognition, and trend analysis, the system recommends a LONG position on BTC. The analysis shows strong bullish momentum with key support levels holding, and multiple technical indicators confirming upward movement.",
+            "execution_advice": "cautious",
+        },
+        "indicator_features_json": "",
+        "pattern_features_json": "",
+        "trend_features_json": "",
+        "risk_features_json": "",
+        "decision_features_json": "",
+        "case_context_json": "",
+        "human_advice": {
+            "summary": "本次 BTC 1h 分析的综合结论为 LONG，适合作为演示样例。",
+            "stance": "当前结构偏向多头，但仍需结合风险控制理解结果。",
+            "action": "建议将该结果作为辅助分析信号，而不是直接替代实盘决策。",
         },
     }
 

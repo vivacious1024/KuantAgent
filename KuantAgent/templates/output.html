@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KuantAgent - Analysis Report</title>
+    <title>KuantAgent - 分析报告</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -110,6 +110,105 @@
             font-size: 0.9rem;
             color: var(--gray-600);
             font-style: italic;
+        }
+
+        .kv-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .kv-item {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: 0.9rem 1rem;
+        }
+
+        .kv-label {
+            font-size: 0.88rem;
+            color: var(--gray-500);
+            margin-bottom: 0.25rem;
+        }
+
+        .kv-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            word-break: break-word;
+        }
+
+        .section-note {
+            color: var(--gray-600);
+            font-size: 0.98rem;
+            margin-bottom: 1rem;
+        }
+
+        .json-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+        }
+
+        .json-card {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .json-card h5 {
+            margin: 0;
+            padding: 0.9rem 1rem;
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            color: var(--etrade-purple);
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .json-box {
+            margin: 0;
+            padding: 1rem;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+        }
+
+        .report-card {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: 14px;
+            padding: 1.1rem 1.2rem;
+        }
+
+        .report-card h5 {
+            color: var(--etrade-purple);
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.8rem;
+        }
+
+        .advice-card {
+            background: linear-gradient(135deg, #f8f5ff 0%, #ffffff 100%);
+            border: 2px solid rgba(86, 39, 216, 0.18);
+            border-radius: 16px;
+            padding: 1.4rem;
+        }
+
+        .advice-card p:last-child {
+            margin-bottom: 0;
         }
          
          .panel {
@@ -475,201 +574,227 @@
                 <!-- Back Button -->
                 <div style="margin-top: 2rem;">
                     <a href="/demo" class="btn btn-outline-light" style="font-size: 1.3rem; padding: 0.75rem 1.5rem; border-radius: 12px;">
-                        <i class="fas fa-arrow-left"></i>&nbsp;&nbsp; Back to Analysis Console
+                        <i class="fas fa-arrow-left"></i>&nbsp;&nbsp; 返回分析界面
                     </a>
                 </div>
             </div>
         </div>
         
-                 <!-- Results Section -->
-         <div class="results-section">
-                              <!-- Row 1: Analysis Summary, Final Decision, Technical Indicators -->
-             <div class="panel-group">
-                 <div class="panel">
-                    <h4 class="panel-title">
-                        <i class="fas fa-chart-pie"></i> Run Overview
-                    </h4>
-                     <div class="row align-items-stretch">
-                         <div class="col-md-4 d-flex">
-                             <div class="stats-card w-100">
-                                 <div class="stats-number">{{ results.data_length if results.data_length else '1,247' }}</div>
-                                 <div class="stats-label">Data Points</div>
-                             </div>
-                         </div>
-                         <div class="col-md-4 d-flex">
-                             <div class="stats-card w-100">
-                                 <div class="stats-number">{{ results.timeframe if results.timeframe else '1h' }}</div>
-                                 <div class="stats-label">Timeframe</div>
-                             </div>
-                         </div>
-                         <div class="col-md-4 d-flex">
-                             <div class="stats-card w-100">
-                                 <div class="stats-number">{{ results.asset_name if results.asset_name else 'BTC' }}</div>
-                                 <div class="stats-label">Asset</div>
-                             </div>
-                         </div>
-                     </div>
-                 </div>
+        <div class="results-section">
+            {% set pipeline = results.pipeline_summary if results.pipeline_summary else {} %}
+            {% set final_decision = results.final_decision if results.final_decision else {} %}
 
-                 <div class="panel">
-                     <h4 class="panel-title">
-                         <i class="fas fa-filter"></i> Data Processing Pipeline
-                     </h4>
-                     {% set pipeline = results.pipeline_summary if results.pipeline_summary else {} %}
-                     <div>
-                         <p><strong>Source:</strong> {{ pipeline.data_source if pipeline.data_source else 'Yahoo Finance live feed' }}</p>
-                         <p><strong>Raw Rows:</strong> {{ pipeline.raw_rows if pipeline.raw_rows else results.data_length }}</p>
-                         <p><strong>Normalized Rows:</strong> {{ pipeline.normalized_rows if pipeline.normalized_rows else results.data_length }}</p>
-                         <p><strong>Analysis Window:</strong> {{ pipeline.window_rows if pipeline.window_rows else results.data_length }} rows (window size {{ pipeline.window_size if pipeline.window_size else 45 }})</p>
-                         <p><strong>Time Span:</strong> {{ pipeline.first_timestamp if pipeline.first_timestamp else 'N/A' }} to {{ pipeline.last_timestamp if pipeline.last_timestamp else 'N/A' }}</p>
-                     </div>
-                 </div>
-                 
-                 <!-- Final Decision Panel -->
-                 <div class="panel">
-                     <h4 class="panel-title">
-                         <i class="fas fa-bullseye"></i> Decision Output
-                     </h4>
-                     <div class="text-center mb-3">
-                         {% if results.final_decision and results.final_decision.decision %}
-                             <span class="decision-badge decision-{{ results.final_decision.decision.lower() }}">{{ results.final_decision.decision }}</span>
-                         {% else %}
-                             <span class="decision-badge decision-long">LONG</span>
-                         {% endif %}
-                     </div>
-                     <div>
-                         {% if results.final_decision %}
-                             <p><strong>Forecast Horizon:</strong> {{ results.final_decision.forecast_horizon if results.final_decision.forecast_horizon else '24-48 hours' }}</p>
-                             <p><strong>Risk/Reward Ratio:</strong> {{ results.final_decision.risk_reward_ratio if results.final_decision.risk_reward_ratio else '1:2.5' }}</p>
-                             <p><strong>Justification:</strong></p>
-                             <p>{{ results.final_decision.justification if results.final_decision.justification else 'Based on comprehensive analysis of technical indicators, pattern recognition, and trend analysis, the system recommends a LONG position on BTC. The analysis shows strong bullish momentum with key support levels holding, and multiple technical indicators confirming upward movement.' }}</p>
-                         {% else %}
-                             <p><strong>Forecast Horizon:</strong> 24-48 hours</p>
-                             <p><strong>Risk/Reward Ratio:</strong> 1:2.5</p>
-                             <p><strong>Justification:</strong></p>
-                             <p>Based on comprehensive analysis of technical indicators, pattern recognition, and trend analysis, the system recommends a LONG position on BTC. The analysis shows strong bullish momentum with key support levels holding, and multiple technical indicators confirming upward movement.</p>
-                         {% endif %}
-                     </div>
-                 </div>
-                 
-                                 <!-- Technical Indicators Panel -->
-                <div class="large-panel">
-                    <h3 class="large-panel-title">
-                        <i class="fas fa-chart-bar"></i> Indicator Agent
-                    </h3>
-                    <div class="large-panel-section">
-                        {% if results.technical_indicators %}
-                            <div class="auto-beautify">{{ results.technical_indicators | safe }}</div>
+            <div class="panel-group">
+                <div class="panel">
+                    <h4 class="panel-title">
+                        <i class="fas fa-chart-pie"></i> 运行概览
+                    </h4>
+                    <div class="kv-grid">
+                        <div class="kv-item">
+                            <div class="kv-label">分析标的</div>
+                            <div class="kv-value">{{ results.asset_name if results.asset_name else 'BTC' }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">时间尺度</div>
+                            <div class="kv-value">{{ results.timeframe if results.timeframe else '1h' }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">窗口数据点数</div>
+                            <div class="kv-value">{{ results.data_length if results.data_length else 'N/A' }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h4 class="panel-title">
+                        <i class="fas fa-filter"></i> 数据处理层摘要
+                    </h4>
+                    <p class="section-note">该部分对应 KuantAgent 的数据处理层，展示原始数据如何被标准化并送入后续分析链。</p>
+                    <div class="kv-grid">
+                        <div class="kv-item">
+                            <div class="kv-label">数据来源</div>
+                            <div class="kv-value">{{ pipeline.data_source if pipeline.data_source else 'Yahoo Finance 实时数据' }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">原始行数</div>
+                            <div class="kv-value">{{ pipeline.raw_rows if pipeline.raw_rows else results.data_length }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">标准化后行数</div>
+                            <div class="kv-value">{{ pipeline.normalized_rows if pipeline.normalized_rows else results.data_length }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">分析窗口</div>
+                            <div class="kv-value">{{ pipeline.window_rows if pipeline.window_rows else results.data_length }} 行 / 窗口 {{ pipeline.window_size if pipeline.window_size else 45 }}</div>
+                        </div>
+                        <div class="kv-item" style="grid-column: 1 / -1;">
+                            <div class="kv-label">时间跨度</div>
+                            <div class="kv-value">{{ pipeline.first_timestamp if pipeline.first_timestamp else 'N/A' }} 至 {{ pipeline.last_timestamp if pipeline.last_timestamp else 'N/A' }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h4 class="panel-title">
+                        <i class="fas fa-bullseye"></i> 最终交易建议
+                    </h4>
+                    <div class="text-center mb-3">
+                        {% if final_decision.decision %}
+                            <span class="decision-badge decision-{{ final_decision.decision.lower() }}">{{ final_decision.decision_label if final_decision.decision_label is defined else final_decision.decision }}</span>
                         {% else %}
-                            <div class="auto-beautify">
-                                <ul>
-                                    <li><strong>RSI (14):</strong> 65.4 - Neutral to bullish momentum</li>
-                                    <li><strong>MACD:</strong> Bullish crossover with increasing histogram</li>
-                                    <li><strong>Moving Averages:</strong> Price above 50-day and 200-day MA</li>
-                                    <li><strong>Bollinger Bands:</strong> Price in upper band, showing strength</li>
-                                    <li><strong>Volume:</strong> Above average volume supporting price action</li>
-                                </ul>
+                            <span class="decision-badge decision-long">N/A</span>
+                        {% endif %}
+                    </div>
+                    <div class="kv-grid">
+                        <div class="kv-item">
+                            <div class="kv-label">置信度</div>
+                            <div class="kv-value">{{ final_decision.confidence if final_decision.confidence is defined else 'N/A' }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">执行建议</div>
+                            <div class="kv-value">{{ final_decision.execution_advice_label if final_decision.execution_advice_label is defined else (final_decision.execution_advice if final_decision.execution_advice is defined else 'N/A') }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">风险收益比</div>
+                            <div class="kv-value">{{ final_decision.risk_reward_ratio if final_decision.risk_reward_ratio is defined else 'N/A' }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">基础方向</div>
+                            <div class="kv-value">{{ final_decision.base_decision_label if final_decision.base_decision_label is defined else (final_decision.base_decision if final_decision.base_decision is defined else 'N/A') }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">裁决路径</div>
+                            <div class="kv-value">{{ final_decision.decision_route if final_decision.decision_route is defined else 'N/A' }}</div>
+                        </div>
+                        <div class="kv-item">
+                            <div class="kv-label">校准模式</div>
+                            <div class="kv-value">{{ final_decision.calibration_mode if final_decision.calibration_mode is defined else 'N/A' }}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <div class="kv-label">解释摘要</div>
+                        <div class="kv-value" style="font-weight: 500; line-height: 1.8;">
+                            {{ final_decision.justification if final_decision.justification is defined else '暂无说明。' }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h4 class="panel-title">
+                        <i class="fas fa-project-diagram"></i> 算法分析层中间结果
+                    </h4>
+                    <p class="section-note">该部分展示结构化算法分析模块生成的五类特征与上下文对象，是智能决策层进行校准前的核心证据。</p>
+                    <div class="json-grid">
+                        <div class="json-card">
+                            <h5>指标特征 indicator_features</h5>
+                            <pre class="json-box">{{ results.indicator_features_json if results.indicator_features_json else '暂无数据' }}</pre>
+                        </div>
+                        <div class="json-card">
+                            <h5>形态特征 pattern_features</h5>
+                            <pre class="json-box">{{ results.pattern_features_json if results.pattern_features_json else '暂无数据' }}</pre>
+                        </div>
+                        <div class="json-card">
+                            <h5>趋势特征 trend_features</h5>
+                            <pre class="json-box">{{ results.trend_features_json if results.trend_features_json else '暂无数据' }}</pre>
+                        </div>
+                        <div class="json-card">
+                            <h5>风险特征 risk_features</h5>
+                            <pre class="json-box">{{ results.risk_features_json if results.risk_features_json else '暂无数据' }}</pre>
+                        </div>
+                        <div class="json-card">
+                            <h5>决策特征 decision_features</h5>
+                            <pre class="json-box">{{ results.decision_features_json if results.decision_features_json else '暂无数据' }}</pre>
+                        </div>
+                        <div class="json-card">
+                            <h5>样本上下文 case_context</h5>
+                            <pre class="json-box">{{ results.case_context_json if results.case_context_json else '暂无数据' }}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h4 class="panel-title">
+                        <i class="fas fa-users"></i> 智能决策层 Agent 报告
+                    </h4>
+                    <p class="section-note">该部分展示 Indicator Agent、Pattern Agent、Trend Agent 与 Decision Agent 在最终裁决前后的主要输出。</p>
+                    <div class="report-grid">
+                        <div class="report-card">
+                            <h5>Indicator Agent 指标解释报告</h5>
+                            <div class="auto-beautify">{{ (results.technical_indicators if results.technical_indicators else '暂无指标报告。') | replace('\n', '<br>') | safe }}</div>
+                        </div>
+                        <div class="report-card">
+                            <h5>Pattern Agent 形态解释报告</h5>
+                            <div class="auto-beautify">{{ (results.pattern_analysis if results.pattern_analysis else '暂无形态报告。') | replace('\n', '<br>') | safe }}</div>
+                        </div>
+                        <div class="report-card">
+                            <h5>Trend Agent 趋势环境报告</h5>
+                            <div class="auto-beautify">{{ (results.trend_analysis if results.trend_analysis else '暂无趋势报告。') | replace('\n', '<br>') | safe }}</div>
+                        </div>
+                        <div class="report-card">
+                            <h5>Decision Agent 裁决摘要</h5>
+                            <div class="kv-grid">
+                                <div class="kv-item">
+                                    <div class="kv-label">AI 动作</div>
+                                    <div class="kv-value">{{ final_decision.ai_action_label if final_decision.ai_action_label is defined else (final_decision.ai_action if final_decision.ai_action is defined else 'N/A') }}</div>
+                                </div>
+                                <div class="kv-item">
+                                    <div class="kv-label">信号质量</div>
+                                    <div class="kv-value">{{ final_decision.signal_quality_label if final_decision.signal_quality_label is defined else (final_decision.signal_quality if final_decision.signal_quality is defined else 'N/A') }}</div>
+                                </div>
+                                <div class="kv-item">
+                                    <div class="kv-label">执行等级</div>
+                                    <div class="kv-value">{{ final_decision.execution_grade if final_decision.execution_grade is defined else 'N/A' }}</div>
+                                </div>
+                                <div class="kv-item">
+                                    <div class="kv-label">困难样本分数</div>
+                                    <div class="kv-value">{{ final_decision.hard_case_score if final_decision.hard_case_score is defined else 'N/A' }}</div>
+                                </div>
                             </div>
+                            <div style="margin-top: 1rem;">
+                                <div class="kv-label">路由原因</div>
+                                <div class="kv-value" style="font-weight: 500;">{{ final_decision.route_reason if final_decision.route_reason is defined else '暂无路由说明。' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h4 class="panel-title">
+                        <i class="fas fa-lightbulb"></i> 可解释性投资建议
+                    </h4>
+                    <div class="advice-card">
+                        <p><strong>综合摘要：</strong>{{ results.human_advice.summary if results.human_advice else '暂无摘要。' }}</p>
+                        <p><strong>方向理解：</strong>{{ results.human_advice.stance if results.human_advice else '暂无方向说明。' }}</p>
+                        <p><strong>执行建议：</strong>{{ results.human_advice.action if results.human_advice else '暂无执行建议。' }}</p>
+                    </div>
+                </div>
+
+                {% if results.pattern_chart or results.trend_chart %}
+                <div class="panel">
+                    <h4 class="panel-title">
+                        <i class="fas fa-image"></i> 兼容性图像输出
+                    </h4>
+                    <p class="section-note">当前系统主路径已转向结构化证据分析，以下图像仅作为兼容性或辅助展示，不构成核心决策链。</p>
+                    <div class="report-grid">
+                        {% if results.pattern_chart %}
+                        <div class="report-card">
+                            <h5>形态辅助图</h5>
+                            <div class="image-container">
+                                <img src="data:image/png;base64,{{ results.pattern_chart }}" alt="Pattern Analysis Chart" class="analysis-image">
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if results.trend_chart %}
+                        <div class="report-card">
+                            <h5>趋势辅助图</h5>
+                            <div class="image-container">
+                                <img src="data:image/png;base64,{{ results.trend_chart }}" alt="Trend Analysis Chart" class="analysis-image">
+                            </div>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
-             </div>
-            
-
-            
-                                     <!-- Pattern Agent: Pattern Recognition + Pattern Visualization -->
-            <div class="large-panel">
-                <h3 class="large-panel-title">
-                    <i class="fas fa-brain"></i> Pattern Agent
-                </h3>
-                <div style="display: flex; gap: 2rem; margin-top: 1rem;">
-                    <!-- Left Panel: Pattern Recognition -->
-                    <div class="panel" style="flex: 1;">
-                        <h4 class="panel-title">
-                            <i class="fas fa-search"></i> Pattern Recognition
-                        </h4>
-                        <div class="form-group">
-                            <h5>Identified Pattern:</h5>
-                            {% if results.pattern_analysis %}
-                                <div class="auto-beautify">{{ results.pattern_analysis | safe }}</div>
-                            {% else %}
-                                <ul>
-                                    <li><strong>Descending Triangle:</strong> Lower highs with flat support</li>
-                                    <li><strong>Structure:</strong> Converging trend lines</li>
-                                    <li><strong>Trend:</strong> Prior downtrend continuation</li>
-                                    <li><strong>Symmetry:</strong> Consistent pattern formation</li>
-                                </ul>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="form-group">
-                            <h5>Pattern Reliability:</h5>
-                            <p>Descending triangle has a high success rate for bearish continuation patterns. Key support level at 110,000.</p>
-                        </div>
-                    </div>
-                    
-                    <!-- Right Panel: Pattern Visualization -->
-                    <div class="panel" style="flex: 1;">
-                        <h4 class="panel-title">
-                            <i class="fas fa-chart-bar"></i> Pattern Visualization
-                        </h4>
-                        <div class="image-container">
-                            {% if results.pattern_chart %}
-                                <img src="data:image/png;base64,{{ results.pattern_chart }}" alt="Pattern Analysis Chart" class="analysis-image">
-                            {% else %}
-                                <img src="/api/images/pattern" alt="Pattern Analysis Chart" class="analysis-image">
-                            {% endif %}
-                            <p class="chart-caption">Desc Triangle Overlay</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-             
-                         <!-- Trend Agent: Trend Analysis + Trend Chart -->
-            <div class="large-panel">
-                <h3 class="large-panel-title">
-                    <i class="fas fa-chart-line"></i> Trend Agent
-                </h3>
-                <div class="large-panel-content">
-                    <div class="panel-group-2">
-                        <div class="panel">
-                            <h4 class="panel-title">
-                                <i class="fas fa-analytics"></i> Trend Analysis
-                            </h4>
-                            <div class="form-group">
-                                <h5>Trend Strength Indicators:</h5>
-                                <ul>
-                                    <li><strong>ADX:</strong> 28.5 - Moderate trend strength</li>
-                                    <li><strong>RSI Divergence:</strong> Positive divergence detected</li>
-                                    <li><strong>Momentum:</strong> Declining momentum indicators</li>
-                                    <li><strong>Volume:</strong> Decreasing volume on rallies</li>
-                                </ul>
-                            </div>
-                            
-                            <div class="form-group">
-                                <h5>Likely Downtrend Signal:</h5>
-                                <p>Consistent downward slope and inability to break resistance suggest continued bearish pressure. Short-term trend likely to continue downward.</p>
-                            </div>
-                        </div>
-                        
-                        <div class="panel">
-                            <h4 class="panel-title">
-                                <i class="fas fa-chart-line"></i> Trend Visualization
-                            </h4>
-                            <div class="image-container">
-                                {% if results.trend_chart %}
-                                    <img src="data:image/png;base64,{{ results.trend_chart }}" alt="Trend Analysis Chart" class="analysis-image">
-                                {% else %}
-                                    <img src="/api/images/trend" alt="Trend Analysis Chart" class="analysis-image">
-                                {% endif %}
-                                <p class="chart-caption">Support & Resistance Lines</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-             
-
+                {% endif %}
         </div>
     </div>
 
