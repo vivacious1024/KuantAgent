@@ -514,7 +514,7 @@
 
         <section class="hero">
             <div class="hero-copy">
-                <h2>围绕真实模型链路构建的软件演示界面</h2>
+                <h2>基于多智能体大语言模型的高频金融交易策略研究与实现</h2>
                 <p>
                     该工作台直接对应论文中的 KuantAgent 主流程：先由数据处理层完成统一标准化与固定窗口构造，
                     再由算法分析层提取结构化中间证据，最后交由四个核心 Agent 与 Decision Agent 生成可解释性投资建议。
@@ -822,6 +822,8 @@
             const originalText = analyzeBtn.textContent;
             analyzeBtn.textContent = '分析进行中...';
             analyzeBtn.disabled = true;
+            sessionStorage.removeItem('analysisResults');
+            sessionStorage.removeItem('analysisResultsRunId');
 
             let requestOptions;
 
@@ -881,6 +883,8 @@
                     if (data.redirect) {
                         if (data.full_results) {
                             sessionStorage.setItem('analysisResults', JSON.stringify(data.full_results));
+                            const runId = data.full_results.run_metadata?.run_id || '';
+                            sessionStorage.setItem('analysisResultsRunId', runId);
                         }
                         window.location.href = data.redirect;
                         return;

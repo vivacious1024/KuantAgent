@@ -486,15 +486,24 @@
         }
 
         function normalizeResults() {
+            const params = new URLSearchParams(window.location.search);
+            const expectedRunId = params.get("run_id") || "";
             const sessionResults = sessionStorage.getItem("analysisResults");
-            if (sessionResults) {
+            const storedRunId = sessionStorage.getItem("analysisResultsRunId") || "";
+
+            if (expectedRunId && sessionResults && storedRunId === expectedRunId) {
                 try {
                     return JSON.parse(sessionResults);
                 } catch (error) {
                     console.warn("sessionStorage analysisResults parse failed:", error);
                 }
             }
-            return serverResults || {};
+
+            if (serverResults && Object.keys(serverResults).length) {
+                return serverResults;
+            }
+
+            return {};
         }
 
         function panel(title, icon, bodyHtml, note = "", extraClass = "") {
@@ -541,6 +550,29 @@
             `;
         }
 
+        function renderRunMeta(meta = {}) {
+            return `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>运行编号</h4>
+                        <p style="font-size:1.05rem;">${safe(meta.run_id, "-")}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>模型提供方</h4>
+                        <p>${safe(meta.provider_label || meta.provider, "-")}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>模型名称</h4>
+                        <p style="font-size:1.05rem;">${safe(meta.model, "-")}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>运行时间</h4>
+                        <p style="font-size:1.05rem;">${safe(meta.completed_at || meta.started_at, "-")}</p>
+                    </div>
+                </div>
+            `;
+        }
+
         function renderDecision(decision = {}, humanAdvice = {}) {
             return `
                 <div class="decision-grid">
@@ -568,9 +600,35 @@
                         <h4>校准动作</h4>
                         <p>${safe(decision.ai_action_label || decision.ai_action)}</p>
                     </div>
+                    <div class="decision-card">
+                        <h4>基础置信度</h4>
+                        <p>${safe(decision.base_confidence)}</p>
+                    </div>
+                    <div class="decision-card">
+                        <h4>信号质量</h4>
+                        <p>${safe(decision.signal_quality_label || decision.signal_quality)}</p>
+                    </div>
+                    <div class="decision-card">
+                        <h4>执行等级</h4>
+                        <p>${safe(decision.execution_grade)}</p>
+                    </div>
                 </div>
                 <div class="summary-box">
                     <strong>裁决摘要：</strong>${safe(decision.justification || decision.raw || humanAdvice.summary)}
+                </div>
+                <div class="advice-stack" style="margin-top:16px;">
+                    <div class="advice-card">
+                        <h4>裁决路径</h4>
+                        <p>${safe(decision.decision_route)} ｜ ${safe(decision.route_reason)}</p>
+                    </div>
+                    <div class="advice-card">
+                        <h4>校准模式</h4>
+                        <p>${safe(decision.calibration_mode)} ｜ 模型角色：${safe(decision.model_role)} ｜ 是否已校准：${safe(decision.calibration_applied)} ｜ AI 复核跳过：${safe(decision.ai_review_skipped)}</p>
+                    </div>
+                    <div class="advice-card">
+                        <h4>困难样本评分</h4>
+                        <p>${safe(decision.hard_case_score)} ｜ 预测窗口：${safe(decision.forecast_horizon_bars || decision.forecast_horizon)}</p>
+                    </div>
                 </div>
                 <div class="advice-stack" style="margin-top:16px;">
                     <div class="advice-card">
@@ -658,9 +716,19 @@
 
         function renderPage(results) {
             const root = document.getElementById("content-root");
+            if (!results || !Object.keys(results).length) {
+                root.innerHTML = panel(
+                    "暂无可展示结果",
+                    "fas fa-circle-info",
+                    `<div class="empty-state">当前页面没有检测到有效的本次运行结果。请返回分析台重新发起分析，系统会为每次运行生成新的运行编号和本地日志。</div>`,
+                    "结果页现在只会优先展示当前 run_id 对应的结果，旧缓存不会再自动冒充新分析结果。"
+                );
+                return;
+            }
             const asset = safe(results.asset_name, "未知标的");
             const timeframe = safe(results.timeframe, "未知周期");
             const pipelineSummary = results.pipeline_summary || {};
+            const runMetadata = results.run_metadata || {};
 
             document.getElementById("hero-title").textContent = `${asset} · ${timeframe} 分析报告`;
             document.getElementById("hero-subtitle").textContent = "本报告按 KuantAgent 的三层链路展示：先统一处理原始行情，再生成结构化中间证据，最后由多智能体协同输出可解释性交易建议。";
@@ -685,6 +753,8 @@
                         </div>
                         <div class="panel-body">
                             ${renderStats(pipelineSummary)}
+                            <div style="margin-top:14px;"></div>
+                            ${renderRunMeta(runMetadata)}
                         </div>
                     </div>
 

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import traceback
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -31,9 +32,11 @@ class WebTradingAnalyzer:
         self.config = DEFAULT_CONFIG.copy()
         self.trading_graph = TradingGraph(config=self.config)
         self.data_dir = Path("data")
+        self.logs_dir = Path("logs")
 
         # Ensure data dir exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
 
         # Available assets and their display names
         self.asset_mapping = {
@@ -82,6 +85,31 @@ class WebTradingAnalyzer:
         self.custom_assets_file = self.data_dir / "custom_assets.json"
         self.custom_assets = self.load_custom_assets()
         self.use_multimodal_images = bool(self.config.get("use_multimodal_images", False))
+
+    def build_run_id(self) -> str:
+        return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+    def current_provider(self) -> str:
+        return str(self.config.get("agent_llm_provider", "mimo")).strip().lower()
+
+    def current_model(self) -> str:
+        return str(self.config.get("agent_llm_model", "")).strip()
+
+    def current_provider_label(self) -> str:
+        provider = self.current_provider()
+        mapping = {
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "qwen": "Qwen / SiliconFlow",
+            "mimo": "Mimo",
+        }
+        return mapping.get(provider, provider)
+
+    def persist_run_log(self, payload: Dict[str, Any]) -> None:
+        run_id = payload.get("run_metadata", {}).get("run_id") or self.build_run_id()
+        target = self.logs_dir / f"{run_id}.json"
+        with open(target, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
 
     def fetch_yfinance_data(
         self, symbol: str, interval: str, start_date: str, end_date: str
@@ -180,6 +208,8 @@ class WebTradingAnalyzer:
         source_label: str = "Yahoo Finance",
     ) -> Dict[str, Any]:
         """Run the trading analysis on the provided DataFrame."""
+        run_id = self.build_run_id()
+        started_at = datetime.now().isoformat(timespec="seconds")
         try:
             # Debug: Check DataFrame structure
             print(f"DataFrame columns: {df.columns}")
@@ -235,7 +265,7 @@ class WebTradingAnalyzer:
                 "messages": [],
                 "time_frame": display_timeframe,
                 "stock_name": asset_name,
-                "forecast_horizon_bars": 1,
+                "forecast_horizon_bars": 3,
                 "macro_timeframe": str(macro_context.get("macro_timeframe", "")),
                 "macro_kline_data": macro_context.get("macro_kline_data", {}),
                 "case_context": case_context,
@@ -258,9 +288,20 @@ class WebTradingAnalyzer:
                     "normalized_rows": int(len(normalized_df)),
                     "window_rows": int(len(df_slice)),
                     "window_size": 45,
-                    "future_horizon": 1,
+                    "future_horizon": 3,
                     "first_timestamp": str(df_slice["Datetime"].iloc[0]) if not df_slice.empty else "",
                     "last_timestamp": str(df_slice["Datetime"].iloc[-1]) if not df_slice.empty else "",
+                },
+                "run_metadata": {
+                    "run_id": run_id,
+                    "started_at": started_at,
+                    "completed_at": datetime.now().isoformat(timespec="seconds"),
+                    "provider": self.current_provider(),
+                    "provider_label": self.current_provider_label(),
+                    "model": self.current_model(),
+                    "analysis_mode": "web_interface",
+                    "graph_invoked": True,
+                    "data_source": source_label,
                 },
             }
 
@@ -282,6 +323,18 @@ class WebTradingAnalyzer:
             else:
                 provider_name = "SiliconFlow"
 
+            run_metadata = {
+                "run_id": run_id,
+                "started_at": started_at,
+                "completed_at": datetime.now().isoformat(timespec="seconds"),
+                "provider": self.current_provider(),
+                "provider_label": provider_name,
+                "model": self.current_model(),
+                "analysis_mode": "web_interface",
+                "graph_invoked": False,
+                "data_source": source_label,
+            }
+
             # Check for specific API key authentication errors
             if (
                 "authentication" in error_msg.lower()
@@ -291,30 +344,42 @@ class WebTradingAnalyzer:
             ):
                 return {
                     "success": False,
-                    "error": f"❌ Invalid API Key: The {provider_name} API key you provided is invalid or has expired. Please check your API key in the Settings section and try again.",
+                    "run_metadata": run_metadata,
+                    "error": f"Invalid API Key: The {provider_name} API key you provided is invalid or has expired. Please check your API key and try again.",
                 }
             elif "rate limit" in error_msg.lower() or "429" in error_msg:
                 return {
                     "success": False,
-                    "error": f"⚠️ Rate Limit Exceeded: You've hit the {provider_name} API rate limit. Please wait a moment and try again.",
+                    "run_metadata": run_metadata,
+                    "error": f"Rate Limit Exceeded: You've hit the {provider_name} API rate limit. Please wait a moment and try again.",
                 }
             elif "quota" in error_msg.lower() or "billing" in error_msg.lower():
                 return {
                     "success": False,
-                    "error": f"💳 Billing Issue: Your {provider_name} account has insufficient credits or billing issues. Please check your {provider_name} account.",
+                    "run_metadata": run_metadata,
+                    "error": f"Billing Issue: Your {provider_name} account has insufficient credits or billing issues. Please check your {provider_name} account.",
                 }
             elif "network" in error_msg.lower() or "connection" in error_msg.lower():
                 return {
                     "success": False,
-                    "error": f"🌐 Network Error: Unable to connect to {provider_name} servers. Please check your internet connection and try again.",
+                    "run_metadata": run_metadata,
+                    "error": f"Network Error: Unable to connect to {provider_name} servers. Please check your internet connection and try again.",
                 }
             else:
-                return {"success": False, "error": f"❌ Analysis Error: {error_msg}"}
+                return {
+                    "success": False,
+                    "run_metadata": run_metadata,
+                    "error": f"Analysis Error: {error_msg}",
+                }
 
     def extract_analysis_results(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """Extract and format analysis results for web display."""
         if not results["success"]:
-            return {"error": results["error"]}
+            return {
+                "success": False,
+                "error": results["error"],
+                "run_metadata": results.get("run_metadata", {}),
+            }
 
         final_state = results["final_state"]
 
@@ -447,6 +512,7 @@ class WebTradingAnalyzer:
 
         return {
             "success": True,
+            "run_metadata": results.get("run_metadata", {}),
             "asset_name": results["asset_name"],
             "timeframe": results["timeframe"],
             "data_length": results["data_length"],
@@ -722,41 +788,7 @@ def output():
         except (json.JSONDecodeError, Exception) as e:
             print(f"Error parsing results: {e}")
             # Fall back to default results
-
-    # Default results if none provided
-    default_results = {
-        "asset_name": "BTC",
-        "timeframe": "1h",
-        "data_length": 1247,
-        "technical_indicators": "RSI (14): 65.4 - Neutral to bullish momentum\nMACD: Bullish crossover with increasing histogram\nMoving Averages: Price above 50-day and 200-day MA\nBollinger Bands: Price in upper band, showing strength\nVolume: Above average volume supporting price action",
-        "pattern_analysis": "Bull Flag Pattern: Consolidation after strong upward move\nGolden Cross: 50-day MA crossing above 200-day MA\nHigher Highs & Higher Lows: Uptrend confirmation\nVolume Pattern: Increasing volume on price advances",
-        "trend_analysis": "Primary Trend: Bullish (Long-term)\nSecondary Trend: Bullish (Medium-term)\nShort-term Trend: Consolidating with bullish bias\nADX: 28.5 - Moderate trend strength\nPrice Action: Higher highs and higher lows maintained\nMomentum: Positive divergence on RSI",
-        "pattern_chart": "",
-        "trend_chart": "",
-        "pattern_image_filename": "",
-        "trend_image_filename": "",
-        "final_decision": {
-            "decision": "LONG",
-            "confidence": 0.62,
-            "risk_reward_ratio": "1:2.5",
-            "forecast_horizon": "24-48 hours",
-            "justification": "Based on comprehensive analysis of technical indicators, pattern recognition, and trend analysis, the system recommends a LONG position on BTC. The analysis shows strong bullish momentum with key support levels holding, and multiple technical indicators confirming upward movement.",
-            "execution_advice": "cautious",
-        },
-        "indicator_features_json": "",
-        "pattern_features_json": "",
-        "trend_features_json": "",
-        "risk_features_json": "",
-        "decision_features_json": "",
-        "case_context_json": "",
-        "human_advice": {
-            "summary": "本次 BTC 1h 分析的综合结论为 LONG，适合作为演示样例。",
-            "stance": "当前结构偏向多头，但仍需结合风险控制理解结果。",
-            "action": "建议将该结果作为辅助分析信号，而不是直接替代实盘决策。",
-        },
-    }
-
-    return render_template("output.html", results=default_results)
+    return render_template("output.html", results={})
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -841,6 +873,7 @@ def analyze():
             return jsonify({"error": "Unsupported data source. Use live or upload."})
 
         formatted_results = analyzer.extract_analysis_results(results)
+        analyzer.persist_run_log(formatted_results)
 
         # If redirect is requested, return redirect URL with results
         if redirect_to_output:
@@ -854,7 +887,8 @@ def analyze():
                 # Encode results for URL
                 results_json = json.dumps(url_safe_results)
                 encoded_results = urllib.parse.quote(results_json)
-                redirect_url = f"/output?results={encoded_results}"
+                run_id = formatted_results.get("run_metadata", {}).get("run_id", "")
+                redirect_url = f"/output?run_id={urllib.parse.quote(run_id)}&results={encoded_results}"
 
                 # Store full results (with images) in session or temporary storage
                 # For now, we'll pass them back in the response for the frontend to handle
